@@ -2,6 +2,7 @@ package top.mc506lw.rebar.ironfurnaces
 
 import io.github.pylonmc.rebar.addon.RebarAddon
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
 import org.bukkit.plugin.java.JavaPlugin
 import top.mc506lw.rebar.ironfurnaces.furnace.RecipeDetector
 import java.util.Locale
@@ -29,6 +30,13 @@ class IronFurnaces : JavaPlugin(), RebarAddon {
 
     override val javaPlugin: JavaPlugin
         get() = this
+
+    /**
+     * Rebar matches items/blocks to their addon by the key *namespace*, and its default
+     * implementation would derive it from the plugin name ("lapis-ironfurnaces").
+     * All of this addon's content keys live under the `ironfurnaces` namespace.
+     */
+    override fun getKey(): NamespacedKey = IronFurnaceKeys.key("ironfurnaces")
 
     override val defaultLanguage: Locale
         get() = Locale.ENGLISH
