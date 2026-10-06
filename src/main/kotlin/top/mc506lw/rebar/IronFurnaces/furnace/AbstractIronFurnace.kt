@@ -4,6 +4,7 @@ import io.github.pylonmc.rebar.block.context.BlockBreakContext
 import io.github.pylonmc.rebar.block.context.BlockCreateContext
 import io.github.pylonmc.rebar.block.interfaces.BlockBreakRebarBlockHandler
 import io.github.pylonmc.rebar.block.interfaces.DirectionalRebarBlock
+import io.github.pylonmc.rebar.block.interfaces.SimpleElectricRebarBlock
 import io.github.pylonmc.rebar.block.interfaces.EntityHolderRebarBlock
 import io.github.pylonmc.rebar.block.interfaces.FurnaceRebarBlockHandler
 import io.github.pylonmc.rebar.block.interfaces.InteractRebarBlockHandler
@@ -51,6 +52,7 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
     FurnaceRebarBlockHandler,
     RecipeProcessorRebarBlock<SmeltingRebarRecipe>,
     EntityHolderRebarBlock,
+    SimpleElectricRebarBlock,
     BlockBreakRebarBlockHandler,
     InteractRebarBlockHandler {
 
@@ -112,6 +114,8 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
 
     private val energySystemDelegate = lazy(LazyThreadSafetyMode.NONE) { FurnaceEnergySystem() }
     protected val energySystem by energySystemDelegate
+
+    protected val electricSystem by lazy(LazyThreadSafetyMode.NONE) { FurnaceElectricSystem(this) }
 
     protected val fuelSystem by lazy(LazyThreadSafetyMode.NONE) {
         FurnaceFuelSystem(block, furnaceTier, fuelInv)
@@ -211,6 +215,7 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
     override fun postInitialise() {
         configureRuntime()
         setupBlockType()
+        electricSystem.ensurePorts()
         applyUpgradeEffects()
 
         val displayType = upgradeManager.getDisplayBlockType()
@@ -226,6 +231,7 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         restoreProgressItemBehavior()
         fuelSystem.refreshDisplay()
         setupBlockType()
+        electricSystem.ensurePorts()
 
         val displayType = upgradeManager.getDisplayBlockType()
         displayRenderer.resetState()
@@ -442,6 +448,10 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         outputInv.notifyWindows()
         cachedProgressLabel = null
         cachedProgressStack = null
+
+        // Upgrade layout changed: drop any stale grid demand/production so the furnace
+        // does not keep requesting power it no longer needs.
+        if (electricSystem.hasPorts) electricSystem.idle()
     }
 
     private fun handleNormalTick(effects: UpgradeEffects) {
@@ -457,8 +467,19 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
 
         tryStartSmelting()
 
-        var hadHeat = effects.usesEnergy
-        if (!effects.usesEnergy) {
+        var hadHeat: Boolean
+        if (effects.usesEnergy) {
+            // Industrial furnaces run on grid power: request it while smelting and only
+            // advance once Rebar's network confirms the demand is met.
+            hadHeat = if (isProcessingRecipe) {
+                electricSystem.requiredPower =
+                    FurnaceElectricSystem.BASE_REQUIRED_POWER_PER_TICK * effects.speedMultiplier
+                electricSystem.isPowered
+            } else {
+                electricSystem.requiredPower = 0.0
+                false
+            }
+        } else {
             hadHeat = fuelSystem.isBurning
             if (!hadHeat && isProcessingRecipe) {
                 hadHeat = fuelSystem.consumeFuel()
@@ -480,9 +501,21 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         if (!fuelSystem.isBurning) fuelSystem.consumeFuel()
 
         if (fuelSystem.isBurning) {
-            energySystem.convertHeatToEnergy(tickInterval.toDouble(), effects.generatorPowerMultiplier)
+            val produced = energySystem.convertHeatToEnergy(
+                tickInterval.toDouble(),
+                effects.generatorPowerMultiplier
+            )
+            // Push the generated power onto Rebar's electric network so nearby machines
+            // can actually draw from this furnace, like the classic mod's energy output.
+            electricSystem.requiredPower = 0.0
+            electricSystem.powerProduced = if (produced > 0.0) {
+                produced / tickInterval.coerceAtLeast(1)
+            } else {
+                FurnaceElectricSystem.BASE_POWER_PER_TICK * effects.generatorPowerMultiplier
+            }
             fuelSystem.updateFuelState(tickInterval, effects.generatorSpeedMultiplier)
         } else {
+            electricSystem.idle()
             fuelSystem.updateFuelState(tickInterval)
         }
     }
