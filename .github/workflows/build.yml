@@ -1,0 +1,57 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # gradle.properties 里写死了本机的 org.gradle.java.home=D:\Java\zulu25,
+      # 在 CI 上不存在,先移除,由 setup-java 提供的 JAVA_HOME 接管。
+      - name: Remove local-only org.gradle.java.home
+        shell: pwsh
+        run: |
+          (Get-Content gradle.properties) |
+            Where-Object { $_ -notmatch '^org\.gradle\.java\.home' } |
+            Set-Content gradle.properties
+
+      - name: Set up JDK 25 (Zulu)
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '25'
+
+      - name: Set up Gradle (with cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Build
+        run: ./gradlew build --no-daemon
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lapis-IronFurnaces
+          path: build/libs/*.jar
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/libs/*.jar
+          generate_release_notes: true
