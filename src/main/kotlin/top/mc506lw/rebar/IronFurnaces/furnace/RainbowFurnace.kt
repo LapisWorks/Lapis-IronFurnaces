@@ -1,7 +1,7 @@
 package top.mc506lw.rebar.ironfurnaces.furnace
 
 import io.github.pylonmc.rebar.block.context.BlockCreateContext
-import io.github.pylonmc.rebar.recipe.vanilla.FurnaceRecipeWrapper
+import io.github.pylonmc.rebar.recipe.vanilla.SmeltingRebarRecipe
 import io.github.pylonmc.rebar.util.gui.GuiItems
 import org.bukkit.Color
 import org.bukkit.Material
@@ -113,7 +113,7 @@ class RainbowFurnace : AbstractIronFurnace {
         )
     }
 
-    override fun onRecipeFinished(recipe: FurnaceRecipeWrapper) {
+    override fun onRecipeFinished(recipe: SmeltingRebarRecipe) {
         val maximumByFuel = max(1, (fuelRemaining + tickInterval - 1) / tickInterval)
         val processed = processRecipeBatch(recipe, maximumByFuel)
 

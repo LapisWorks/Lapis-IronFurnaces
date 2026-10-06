@@ -1,6 +1,7 @@
 package top.mc506lw.rebar.ironfurnaces
 
 import io.github.pylonmc.rebar.recipe.RecipeType
+import io.github.pylonmc.rebar.recipe.vanilla.ShapedRebarRecipe
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.inventory.ItemStack
@@ -89,6 +90,6 @@ object FurnaceRecipes {
             }
         }
         recipe.setCategory(CraftingBookCategory.MISC)
-        RecipeType.VANILLA_SHAPED.addRecipe(recipe)
+        RecipeType.VANILLA_SHAPED.addRecipe(ShapedRebarRecipe.fromVanilla(recipe))
     }
 }

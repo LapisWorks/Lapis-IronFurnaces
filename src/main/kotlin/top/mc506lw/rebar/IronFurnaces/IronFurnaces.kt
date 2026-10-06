@@ -30,8 +30,8 @@ class IronFurnaces : JavaPlugin(), RebarAddon {
     override val javaPlugin: JavaPlugin
         get() = this
 
-    override val languages: Set<Locale>
-        get() = setOf(Locale.CHINESE, Locale.ENGLISH)
+    override val defaultLanguage: Locale
+        get() = Locale.ENGLISH
 
     override val material: Material
         get() = Material.FURNACE

@@ -15,8 +15,8 @@ import io.github.pylonmc.rebar.event.api.annotation.MultiHandler
 import io.github.pylonmc.rebar.i18n.RebarArgument
 import io.github.pylonmc.rebar.item.builder.ItemStackBuilder
 import io.github.pylonmc.rebar.logistics.LogisticGroupType
-import io.github.pylonmc.rebar.recipe.vanilla.FurnaceRecipeType
-import io.github.pylonmc.rebar.recipe.vanilla.FurnaceRecipeWrapper
+import io.github.pylonmc.rebar.recipe.vanilla.SmeltingRecipeType
+import io.github.pylonmc.rebar.recipe.vanilla.SmeltingRebarRecipe
 import io.github.pylonmc.rebar.util.MachineUpdateReason
 import io.github.pylonmc.rebar.util.gui.GuiItems
 import io.github.pylonmc.rebar.util.gui.ProgressItem
@@ -49,7 +49,7 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
     TickingRebarBlock,
     LogisticRebarBlock,
     FurnaceRebarBlockHandler,
-    RecipeProcessorRebarBlock<FurnaceRecipeWrapper>,
+    RecipeProcessorRebarBlock<SmeltingRebarRecipe>,
     EntityHolderRebarBlock,
     BlockBreakRebarBlockHandler,
     InteractRebarBlockHandler {
@@ -159,7 +159,7 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
     }
 
     init {
-        setRecipeType(FurnaceRecipeType)
+        setRecipeType(SmeltingRecipeType)
         recipeProgressItem = InvertedProgressItem(GuiItems.background())
         setTickInterval(tickInterval)
         upgradeRedSlot.setMaxStackSize(0, 1)
@@ -281,7 +281,7 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         }
     }
 
-    override fun onRecipeFinished(recipe: FurnaceRecipeWrapper) {
+    override fun onRecipeFinished(recipe: SmeltingRebarRecipe) {
         processRecipeBatch(recipe, 1)
         tryStartSmelting()
         if (!isProcessingRecipe) resetRecipeProgressDisplay()
@@ -321,13 +321,13 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         block.world.spawnParticle(Particle.SMOKE, smokeParticleLocation, 1, 0.1, 0.2, 0.1, 0.01)
     }
 
-    protected fun processRecipeBatch(recipe: FurnaceRecipeWrapper, requestedItems: Int): Int {
+    protected fun processRecipeBatch(recipe: SmeltingRebarRecipe, requestedItems: Int): Int {
         if (requestedItems <= 0) return 0
 
         val input = inputInv.getUnsafeItem(0) ?: return 0
-        if (input.isEmpty || !recipe.isInput(input)) return 0
+        if (input.isEmpty || !recipe.ingredient.matchesIgnoringAmount(input)) return 0
 
-        val result = recipe.recipe.result
+        val result = recipe.result.item
         val batchSize = min(
             min(requestedItems, input.amount),
             availableOutputBatches(result)
@@ -496,7 +496,7 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
                 input != null &&
                 !input.isEmpty &&
                 recipe != null &&
-                recipe.isInput(input) &&
+                recipe.ingredient.matchesIgnoringAmount(input) &&
                 upgradeManager.isRecipeCompatible(RecipeDetector.detectRecipeCompatibility(input))
             if (!isValid) {
                 stopRecipe()
@@ -507,11 +507,11 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
     }
 
     private fun tryStartSmelting(
-        recipe: FurnaceRecipeWrapper,
+        recipe: SmeltingRebarRecipe,
         stack: ItemStack,
         effects: UpgradeEffects
     ): Boolean {
-        if (!recipe.isInput(stack) || !outputInv.canHold(recipe.recipe.result)) return false
+        if (!recipe.ingredient.matchesIgnoringAmount(stack) || !outputInv.canHold(recipe.result.item)) return false
 
         val actualTime = (furnaceTier.smeltTimePerItem * effects.smeltTimeModifier)
             .toInt()

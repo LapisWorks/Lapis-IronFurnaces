@@ -1,16 +1,15 @@
 package top.mc506lw.rebar.ironfurnaces.furnace
 
-import io.github.pylonmc.rebar.recipe.vanilla.FurnaceRecipeType
-import io.github.pylonmc.rebar.recipe.vanilla.FurnaceRecipeWrapper
+import io.github.pylonmc.rebar.recipe.vanilla.SmeltingRecipeType
+import io.github.pylonmc.rebar.recipe.vanilla.SmeltingRebarRecipe
 import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
-import org.bukkit.inventory.RecipeChoice
 import top.mc506lw.rebar.ironfurnaces.furnace.UpgradeEffectManager.RecipeCompatibility
 import java.util.EnumMap
 
 object RecipeDetector {
     private val compatibilityCache = EnumMap<Material, RecipeCompatibility>(Material::class.java)
-    private val furnaceRecipeCache = EnumMap<Material, List<FurnaceRecipeWrapper>>(Material::class.java)
+    private val furnaceRecipeCache = EnumMap<Material, List<SmeltingRebarRecipe>>(Material::class.java)
     private var cachedRecipeCount = -1
 
     private val oreMaterials = setOf(
@@ -62,15 +61,15 @@ object RecipeDetector {
         return compatibilityCache.computeIfAbsent(stack.type, ::classifyMaterial)
     }
 
-    fun matchingFurnaceRecipes(stack: ItemStack): List<FurnaceRecipeWrapper> {
-        val recipes = FurnaceRecipeType.recipes
+    fun matchingFurnaceRecipes(stack: ItemStack): List<SmeltingRebarRecipe> {
+        val recipes = SmeltingRecipeType.recipes
         if (recipes.size != cachedRecipeCount) {
             furnaceRecipeCache.clear()
             cachedRecipeCount = recipes.size
         }
 
         return furnaceRecipeCache.computeIfAbsent(stack.type) { material ->
-            recipes.filter { acceptsMaterial(it.recipe.inputChoice, material) }
+            recipes.filter { it.ingredient.matchesIgnoringAmount(stack) }
         }
     }
 
@@ -97,12 +96,6 @@ object RecipeDetector {
         material in foodMaterials || material.isEdible -> RecipeCompatibility.SMOKER
         material in logMaterials || isLogMaterial(material) -> RecipeCompatibility.SMOKER
         else -> RecipeCompatibility.NORMAL
-    }
-
-    private fun acceptsMaterial(choice: RecipeChoice, material: Material): Boolean = when (choice) {
-        is RecipeChoice.MaterialChoice -> material in choice.choices
-        is RecipeChoice.ExactChoice -> choice.choices.any { it.type == material }
-        else -> true
     }
 
     private fun isLogMaterial(material: Material): Boolean =
