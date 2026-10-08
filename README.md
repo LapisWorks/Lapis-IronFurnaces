@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Minecraft-26.1.2-brightgreen?style=flat-square" alt="Minecraft">
+  <img src="https://img.shields.io/badge/Minecraft-26.2-brightgreen?style=flat-square" alt="Minecraft">
   <img src="https://img.shields.io/badge/Rebar-依赖-orange?style=flat-square" alt="Rebar">
 </p>
 
@@ -16,16 +16,38 @@
 
 ## 📋 简介
 
-**Lapis-IronFurnaces** 是 **Rebar 框架的附属插件**，复刻经典模组 **[Iron Furnaces](https://modrinth.com/mod/iron-furnaces)**。
+**Lapis-IronFurnaces** 是经典模组 **[Iron Furnaces](https://modrinth.com/mod/iron-furnaces)**（源码 [Qelifern/IronFurnaces](https://github.com/Qelifern/IronFurnaces)）的**服务端复刻版**，
+以 **Rebar 框架附属插件**的形式运行在 Paper 服务端上：熔炉等级、升级组件与核心机制尽量与模组保持一致，电力与物流则接入 Rebar 生态。
 
 本插件为你的服务器添加**多级高级熔炉**，从铜到下界合金，9种不同速度的熔炉满足你所有需求！
+
+### 🔁 与模组版的对照
+
+**✅ 一样的**
+
+- 9 个熔炉等级与速度：铜 180 / 铁 160 / 金 120 / 钻石 80 / 绿宝石 40 / 水晶 40 / 黑曜石 20 / 下界合金 5 tick
+- 6 个升级组件与颜色槽位（红=高炉/烟熏、绿=速度/燃料、蓝=工厂/发电机），每个槽只能放 1 个
+- 组件效果：速度=时间减半/燃料 ×2，燃料=热值 ×2/时间 +25%，高炉/烟熏=只烧对应配方，发电机=热量转电力且不再烧炼
+- 工厂模式：禁用燃料槽、改用电力，6 入 6 出按等级开放 2/4/6，每个输入槽独立并行烧炼、各自一条进度条
+- 工厂每件物品固定能耗（4000 J × 绿组件修正）：越快越耗电，但每件总能耗相同
+- 发电机出力按等级（40~2000 W/t），绿组件修正与模组一致
+
+**⚠️ 不一样的**
+
+- 运行环境：Rebar 附属插件（Paper 服务端），不是 Forge 模组
+- 电力：接入 Rebar 电网，没有模组那样的内部储能缓冲（Rebar 里储能是独立方块）
+- 物流：用 Rebar 物流组替代模组的"每面自动输入/输出 + 自动均分"
+- 红石：只做门控（忽略 / 有信号时停止 / 仅有信号时工作），模组的比较器输出未实现（Bukkit 无法让普通方块输出模拟红石信号）；被门控时是**暂停**而不是清空进度
+- 高炉/烟熏额外有 ×2 燃料惩罚（模组只靠限制配方类型平衡）
+- 彩虹熔炉：模组里它发电 2000 RF/t，本插件改成批量烧炼 + 颜色循环
+- 模组的每面配置 GUI、经验收集、无线热能接收器未实现
 
 ### ⚠️ 前置要求
 
 | 要求 | 版本 | 说明 |
 |------|------|------|
-| **Minecraft** | **26.1.2** | 仅支持此版本（Paper 或其分支）|
-| **Rebar** | **0.42.0+** | 必须安装，本插件是 Rebar 的附属插件 |
+| **Minecraft** | **26.2** | 仅支持此版本（Paper 或其分支）|
+| **Rebar** | **0.44.4+** | 必须安装，本插件是 Rebar 的附属插件 |
 
 > ⚠️ **重要：** 本插件**必须配合 Rebar 使用**，无法独立运行！请先安装 [Rebar](https://github.com/pylonmc/Rebar) 插件。
 
@@ -239,7 +261,7 @@
 **享受更快的熔炼体验！** 🔥
 
 <p>
- Made with ❤️ for <strong>Minecraft 26.1.2</strong> · Powered by <strong>mc506lw</strong>
+ Made with ❤️ for <strong>Minecraft 26.2</strong> · Powered by <strong>mc506lw</strong>
 </p>
 
 <p>
