@@ -11,11 +11,14 @@ import io.github.pylonmc.rebar.block.interfaces.LogisticRebarBlock
 import io.github.pylonmc.rebar.block.interfaces.SimpleElectricRebarBlock
 import io.github.pylonmc.rebar.block.interfaces.TickingRebarBlock
 import io.github.pylonmc.rebar.block.interfaces.VirtualInventoryRebarBlock
+import io.github.pylonmc.rebar.electricity.WireConnectionService
 import io.github.pylonmc.rebar.electricity.WireEntity
 import io.github.pylonmc.rebar.config.RebarConfig
 import io.github.pylonmc.rebar.event.api.annotation.MultiHandler
 import io.github.pylonmc.rebar.i18n.RebarArgument
+import io.github.pylonmc.rebar.item.RebarItem
 import io.github.pylonmc.rebar.item.builder.ItemStackBuilder
+import io.github.pylonmc.rebar.item.interfaces.WireRebarItem
 import io.github.pylonmc.rebar.logistics.LogisticGroupType
 import io.github.pylonmc.rebar.recipe.vanilla.SmeltingRebarRecipe
 import io.github.pylonmc.rebar.util.MachineUpdateReason
@@ -636,6 +639,10 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         if (priority != EventPriority.NORMAL) return
         if (!event.action.isRightClick || event.hand != EquipmentSlot.HAND) return
 
+        // 接线时不要弹界面：手里拿着线、或正在拉线（线的一端已经连上）时，把事件完整留给 Rebar 的
+        // 端口实体处理。注意这里必须**在取消事件之前**返回，否则会连累 Rebar 的接线交互。
+        if (isWiring(event.player)) return
+
         event.isCancelled = true
         Window.builder()
             .setUpperGui(createGui())
@@ -644,6 +651,11 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
             .build()
             .open()
     }
+
+    /** 玩家是不是在接电线（手里拿着线物品，或者已经拉着一条线）。 */
+    private fun isWiring(player: Player): Boolean =
+        WireConnectionService.getWirePlayerIsConnecting(player) != null ||
+            RebarItem.isRebarItem<WireRebarItem>(player.inventory.itemInMainHand)
 
     /** Current redstone gate, shown by the button in the bottom-right of the furnace GUI. */
     internal val currentRedstoneMode: RedstoneMode
