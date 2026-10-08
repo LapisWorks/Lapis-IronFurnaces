@@ -1,5 +1,6 @@
 package top.mc506lw.rebar.ironfurnaces.furnace
 
+import io.github.pylonmc.rebar.i18n.RebarArgument
 import io.github.pylonmc.rebar.item.builder.ItemStackBuilder
 import io.github.pylonmc.rebar.util.gui.GuiItems
 import net.kyori.adventure.text.Component
@@ -54,7 +55,12 @@ class FurnaceGuiFactory(
             return ItemStackBuilder.of(Material.REDSTONE_TORCH)
                 .name(Component.translatable("ironfurnaces.gui.redstone.name"))
                 .lore(
-                    Component.translatable("ironfurnaces.gui.redstone.lore", mode),
+                    // 占位符必须用 RebarArgument 传：Rebar 的翻译器只替换 RebarArgument 类型的参数，
+                    // 直接塞 Component 的话 %mode% 会原样留在界面上
+                    Component.translatable(
+                        "ironfurnaces.gui.redstone.lore",
+                        RebarArgument.of("mode", mode)
+                    ),
                     Component.translatable("ironfurnaces.gui.redstone.hint")
                 )
         }
@@ -66,7 +72,7 @@ class FurnaceGuiFactory(
             player.sendMessage(
                 Component.translatable(
                     "ironfurnaces.message.redstone_mode",
-                    Component.translatable(mode.translationKey)
+                    RebarArgument.of("mode", Component.translatable(mode.translationKey))
                 )
             )
             notifyWindows()

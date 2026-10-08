@@ -17,6 +17,10 @@ class IronFurnaces : JavaPlugin(), RebarAddon {
 
     override fun onEnable() {
         instance = this
+        // 首次启动把自带的 config.yml（含中英注释）写到插件目录，之后读服务器上的那份
+        saveDefaultConfig()
+        reloadConfig()
+
         registerWithRebar()
 
         IronFurnaceItems.initialize()

@@ -11,12 +11,14 @@ import io.github.pylonmc.rebar.block.interfaces.LogisticRebarBlock
 import io.github.pylonmc.rebar.block.interfaces.SimpleElectricRebarBlock
 import io.github.pylonmc.rebar.block.interfaces.TickingRebarBlock
 import io.github.pylonmc.rebar.block.interfaces.VirtualInventoryRebarBlock
+import io.github.pylonmc.rebar.electricity.WireEntity
 import io.github.pylonmc.rebar.event.api.annotation.MultiHandler
 import io.github.pylonmc.rebar.i18n.RebarArgument
 import io.github.pylonmc.rebar.item.builder.ItemStackBuilder
 import io.github.pylonmc.rebar.logistics.LogisticGroupType
 import io.github.pylonmc.rebar.recipe.vanilla.SmeltingRebarRecipe
 import io.github.pylonmc.rebar.util.MachineUpdateReason
+import io.github.pylonmc.rebar.util.Either
 import io.github.pylonmc.rebar.util.gui.GuiItems
 import io.github.pylonmc.rebar.util.gui.ProgressItem
 import io.github.pylonmc.rebar.waila.WailaDisplay
@@ -24,6 +26,7 @@ import io.papermc.paper.datacomponent.DataComponentTypes
 import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.Particle
+import org.bukkit.Location
 import org.bukkit.block.Block
 import org.bukkit.entity.Player
 import org.bukkit.event.EventPriority
@@ -321,7 +324,35 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
 
     override fun onPostBlockBreak(context: BlockBreakContext) {
         tryRemoveAllEntities()
+        removeConnectedWires()
     }
+
+    /**
+     * Rebar 在方块被破坏时**不会**清理挂在它端口上的电线：`WireEntity` 只有在自己被移除时才会
+     * `disconnectFrom`，所以方块没了线还留在原地，指向一个已经不存在的节点。
+     *
+     * 这里手动收尾：把落在这个方块上的电线掉出来再移除，让它正常断开两端的节点。
+     *
+     * 已知限制：`getLoadedWires()` 只包含已加载的电线，如果线的另一端在未加载的区块里，
+     * 这条线清理不到（Rebar 侧的数据问题，插件改不了）。
+     */
+    private fun removeConnectedWires() {
+        val brokenAt = block.location
+        for (wire in WireEntity.loadedWires) {
+            if (!wire.attachesTo(brokenAt)) continue
+            wire.dropItemsAt(brokenAt)
+            wire.entity.remove()
+        }
+    }
+
+    private fun WireEntity.attachesTo(location: Location): Boolean {
+        if (port.location.isSameBlockAs(location)) return true
+        val other = otherEnd
+        return other is Either.Right && other.value.location.isSameBlockAs(location)
+    }
+
+    private fun Location.isSameBlockAs(other: Location): Boolean =
+        world == other.world && blockX == other.blockX && blockY == other.blockY && blockZ == other.blockZ
 
     override fun tick() {
         val effects = upgradeManager.calculateEffects()
@@ -390,7 +421,7 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         if (!fuelSystem.isBurning) fuelSystem.consumeFuel()
 
         if (fuelSystem.isBurning) {
-            val wattsPerTick = furnaceTier.generation * effects.generatorPowerMultiplier
+            val wattsPerTick = FurnaceConfig.generation(furnaceTier) * effects.generatorPowerMultiplier
             energySystem.convertHeatToEnergy(tickInterval.toDouble(), wattsPerTick)
             // Push the generated power onto Rebar's electric network so nearby machines
             // can actually draw from this furnace, like the classic mod's energy output.
@@ -409,7 +440,7 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
      * but spends the same energy per item, exactly like the classic mod.
      */
     private fun powerDraw(effects: UpgradeEffects): Double =
-        FurnaceElectricSystem.ENERGY_PER_ITEM * effects.powerDrawMultiplier / furnaceTier.smeltTimePerItem
+        FurnaceConfig.energyPerItem() * effects.powerDrawMultiplier / furnaceTier.smeltTimePerItem
 
     private fun isGeneratorMode(mode: FurnaceMode): Boolean = when (mode) {
         FurnaceMode.GENERATOR_ONLY,
@@ -459,7 +490,9 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
     }
 
     private fun cookTimeTicks(effects: UpgradeEffects): Int =
-        (furnaceTier.smeltTimePerItem * effects.smeltTimeModifier).toInt().coerceAtLeast(1)
+        (furnaceTier.smeltTimePerItem * effects.smeltTimeModifier * FurnaceConfig.speedMultiplier)
+            .toInt()
+            .coerceAtLeast(1)
 
     private fun progressTask(slot: Int, effects: UpgradeEffects) {
         val task = tasks[slot]
@@ -737,8 +770,10 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
     private fun applyUpgradeEffects() {
         val effects = upgradeManager.calculateEffects()
         fuelSystem.fuelConsumptionRate = effects.fuelConsumptionRate
-        fuelSystem.fuelEfficiency = effects.fuelEfficiencyBonus
-        fuelSystem.speedMultiplier = effects.speedMultiplier
+        // 燃料倍率作用于"一单位燃料能烧多久"；速度倍率同时进 totalSpeedMultiplier，
+        // 这样全局变快时每单位燃料烧的物品数不变（和模组的模型一致）
+        fuelSystem.fuelEfficiency = effects.fuelEfficiencyBonus * FurnaceConfig.fuelMultiplier
+        fuelSystem.speedMultiplier = effects.speedMultiplier * FurnaceConfig.speedMultiplier
         // Generator furnaces burn a fuel for its full burn time regardless of how fast the furnace
         // is, so that a higher tier really does yield more energy per fuel.
         fuelSystem.tierSpeedScaling = !isGeneratorMode(effects.mode)

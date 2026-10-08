@@ -1,0 +1,45 @@
+# ==========================================================================
+# Lapis-IronFurnaces 配置 / Configuration
+#
+# 取值规则：先从下面的表里取基础值，再乘上 multiplier 里的整体倍率。
+# 倍率之间是相乘关系，各自只作用在自己那一类数值上。
+#
+# How values are computed: take the base value from the tables below, then
+# multiply it by the matching multiplier. The multipliers are independent of
+# each other and multiply together (they are never added).
+# ==========================================================================
+
+multiplier:
+  # 电力倍率：发电机出力与工厂耗电都乘它
+  # Power multiplier: applies to generator output and factory consumption
+  power: 1.0
+
+  # 燃料倍率：燃料热值（一单位燃料能烧多久）乘它
+  # Fuel multiplier: applies to how much heat a unit of fuel provides
+  fuel: 1.0
+
+  # 速度倍率：烧炼时间乘它；小于 1 更快，大于 1 更慢
+  # Speed multiplier: smelting time is multiplied by it (< 1 = faster)
+  speed: 1.0
+
+generation:
+  # 各等级熔炉作为发电机时的出力，单位「瓦特/刻」
+  # 想整体调大就用上面的 multiplier.power，不用逐个改
+  # Generator output per furnace tier, in watts per tick.
+  # Use multiplier.power above for a global change instead of editing each line.
+  copper: 40.0
+  iron: 40.0
+  gold: 160.0
+  diamond: 240.0
+  emerald: 320.0
+  crystal: 360.0
+  obsidian: 500.0
+  netherite: 1000.0
+  rainbow: 2000.0
+
+consumption:
+  # 工厂模式每件物品的耗电，单位「焦耳」
+  # 模组的算法是「配方 tick × 20」，原版配方 200 tick，所以是 4000
+  # Energy spent per item in factory mode, in joules.
+  # The classic mod uses "recipe ticks x 20"; a vanilla 200 tick recipe = 4000.
+  energy-per-item: 4000.0
