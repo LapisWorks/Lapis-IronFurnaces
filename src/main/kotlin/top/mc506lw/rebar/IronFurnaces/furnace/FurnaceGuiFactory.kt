@@ -80,13 +80,41 @@ class FurnaceGuiFactory(
     }
 
     fun createMainGui(): Gui {
-        // The factory layout is also kept while leftovers sit in the extra slots, so nothing gets
-        // trapped when the upgrade is pulled back out.
-        return if (!furnace.isFuelSlotEnabled || furnace.displayedSlots > 1) {
-            createFactoryGui()
-        } else {
-            createFuelGui()
+        // 发电机模式：模组会把熔炼输入、输出、普通燃料槽全部禁用（isActive() = isFurnace()），
+        // 只留一个专用的发电机燃料槽（模组里是 slot 6，位于界面中间）。
+        // 工厂布局在拆掉升级、槽里还留着东西时也会保留，避免物品被"锁"在看不见的槽里。
+        return when {
+            furnace.inGeneratorMode -> createGeneratorGui()
+            !furnace.isFuelSlotEnabled || furnace.displayedSlots > 1 -> createFactoryGui()
+            else -> createFuelGui()
         }
+    }
+
+    /**
+     * 发电机布局：中间一个燃料槽 + 燃料进度。
+     *
+     * 如果拆掉工厂升级时输入/输出槽里还留着东西，这里会把这两个槽也显示出来，方便取回；
+     * 没有残留时它们是背景，和模组"直接隐藏"的效果一致。
+     */
+    private fun createGeneratorGui(): Gui {
+        val leftovers = furnace.displayedInputSlots > 1 || furnace.displayedOutputSlots > 1
+
+        return Gui.builder()
+            .setStructure(
+                "# # # # # # # # U",
+                if (leftovers) "# # i # # # # # #" else "# # # # # # # # #",
+                "# # # # > f # # #",
+                if (leftovers) "# # # # # # o # #" else "# # # # # # # # #",
+                "# # # # # # # # R"
+            )
+            .addIngredient('#', GuiItems.background())
+            .addIngredient('U', upgradeButton)
+            .addIngredient('R', redstoneButton)
+            .addIngredient('>', fuelSystem.fuelProgressItem)
+            .addIngredient('f', fuelInv)
+            .addIngredient('i', inputInv)
+            .addIngredient('o', outputInv)
+            .build()
     }
 
     /**

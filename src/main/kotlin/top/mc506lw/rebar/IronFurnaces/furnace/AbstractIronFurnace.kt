@@ -258,6 +258,10 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
     internal val isFuelSlotEnabled: Boolean
         get() = fuelSlotEnabled
 
+    /** True while the generator augment is installed: smelting slots are hidden in that mode. */
+    internal val inGeneratorMode: Boolean
+        get() = isGeneratorMode(upgradeManager.calculateEffects().mode)
+
     internal fun progressItem(slot: Int): ProgressItem = progressItems[slot.coerceIn(0, MAX_FACTORY_SLOTS - 1)]
 
     /** True while at least one slot is smelting; drives the "lit" look of an energy furnace. */
