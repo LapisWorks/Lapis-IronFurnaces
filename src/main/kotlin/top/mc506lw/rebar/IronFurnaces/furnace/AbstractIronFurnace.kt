@@ -12,6 +12,7 @@ import io.github.pylonmc.rebar.block.interfaces.SimpleElectricRebarBlock
 import io.github.pylonmc.rebar.block.interfaces.TickingRebarBlock
 import io.github.pylonmc.rebar.block.interfaces.VirtualInventoryRebarBlock
 import io.github.pylonmc.rebar.electricity.WireEntity
+import io.github.pylonmc.rebar.config.RebarConfig
 import io.github.pylonmc.rebar.event.api.annotation.MultiHandler
 import io.github.pylonmc.rebar.i18n.RebarArgument
 import io.github.pylonmc.rebar.item.builder.ItemStackBuilder
@@ -192,6 +193,9 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
     private var fuelSlotEnabled = true
     private var redstoneMode = RedstoneMode.IGNORED
     private var waitingForFuel = false
+
+    /** 刚提出用电需求时要等一个电网周期，网络才会把 isPowered 写回来（见 handleSmeltTick）。 */
+    private var powerGraceTicks = 0
     private var cachedProgressLabel: String? = null
     private var cachedProgressStack: ItemStack? = null
     private val smokeParticleLocation by lazy(LazyThreadSafetyMode.NONE) {
@@ -333,30 +337,15 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
 
     /**
      * Rebar 在方块被破坏时**不会**清理挂在它端口上的电线：`WireEntity` 只有在自己被移除时才会
-     * `disconnectFrom`，所以方块没了线还留在原地，指向一个已经不存在的节点。
+     * `disconnectFrom`，所以方块没了线还留在原地，指向一个已经不存在的节点。悬空的线会让 Rebar
+     * 之后任何一次节点移除都抛 NPE（`ElectricPortEntity.getConnectedWires()` 读 `port.node` 查到空），
+     * 所以必须清掉。
      *
-     * 这里手动收尾：把落在这个方块上的电线掉出来再移除，让它正常断开两端的节点。
-     *
-     * 已知限制：`getLoadedWires()` 只包含已加载的电线，如果线的另一端在未加载的区块里，
-     * 这条线清理不到（Rebar 侧的数据问题，插件改不了）。
+     * 已知限制：`loadedWires` 只包含已加载的电线，如果线的另一端在未加载的区块里，这条线清理不到。
      */
     private fun removeConnectedWires() {
-        val brokenAt = block.location
-        for (wire in WireEntity.loadedWires) {
-            if (!wire.attachesTo(brokenAt)) continue
-            wire.dropItemsAt(brokenAt)
-            wire.entity.remove()
-        }
+        FurnaceWires.removeAt(block.location.toCenterLocation())
     }
-
-    private fun WireEntity.attachesTo(location: Location): Boolean {
-        if (port.location.isSameBlockAs(location)) return true
-        val other = otherEnd
-        return other is Either.Right && other.value.location.isSameBlockAs(location)
-    }
-
-    private fun Location.isSameBlockAs(other: Location): Boolean =
-        world == other.world && blockX == other.blockX && blockY == other.blockY && blockZ == other.blockZ
 
     override fun tick() {
         val effects = upgradeManager.calculateEffects()
@@ -399,8 +388,19 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         val hadHeat = if (effects.usesEnergy) {
             // Every running slot draws its own share, so six parallel smelts ask the grid for six
             // times the power a single smelt would.
+            val hadDemand = electricSystem.requiredPower > 0.0
             electricSystem.requiredPower = running.size * powerDraw(effects)
-            electricSystem.isPowered
+
+            // Rebar 的 consumer 节点只在"电网 tick"（默认 5 tick）时被写 isPowered，刚提出需求时
+            // 字段还是初始值 true。而高等级熔炉配速度/高炉后烧一件只要 1 tick，这几 tick 里能白烧
+            // 好几件，所以刚上电时先等一个电网周期再开始推进。
+            if (!hadDemand) powerGraceTicks = RebarConfig.WIRING_TICK_INTERVAL
+            if (powerGraceTicks > 0) {
+                powerGraceTicks -= tickInterval
+                false
+            } else {
+                electricSystem.isPowered
+            }
         } else {
             var burning = fuelSystem.isBurning
             if (!burning) {

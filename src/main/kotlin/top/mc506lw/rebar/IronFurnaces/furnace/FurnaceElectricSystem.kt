@@ -91,9 +91,15 @@ class FurnaceElectricSystem(
             block.requiredPower = value.coerceAtLeast(0.0)
         }
 
-    /** True when the network is supplying everything this furnace needs. */
+    /**
+     * True when the network is supplying everything this furnace needs.
+     *
+     * 注意：不能只看 `block.isPowered`。Rebar 的 `ElectricConsumerNode.isPowered` 只是一个普通
+     * boolean 字段，由**网络 tick** 时写入；而没接线时这个节点根本不进任何网络，字段就会一直保持
+     * 初始值 `true` —— 表现就是"一台电都没接的工厂炉照样在烧"。所以这里额外要求端子上真的挂着电线。
+     */
     val isPowered: Boolean
-        get() = portsCreated && block.isPowered
+        get() = portsCreated && FurnaceWires.hasAnyWire(block.block.location.toCenterLocation()) && block.isPowered
 
     /** Stops both producing and consuming, e.g. when idling or out of fuel. */
     fun idle() {
