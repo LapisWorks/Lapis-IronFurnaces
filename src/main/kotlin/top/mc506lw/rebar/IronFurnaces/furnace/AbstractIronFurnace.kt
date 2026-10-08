@@ -4,19 +4,17 @@ import io.github.pylonmc.rebar.block.context.BlockBreakContext
 import io.github.pylonmc.rebar.block.context.BlockCreateContext
 import io.github.pylonmc.rebar.block.interfaces.BlockBreakRebarBlockHandler
 import io.github.pylonmc.rebar.block.interfaces.DirectionalRebarBlock
-import io.github.pylonmc.rebar.block.interfaces.SimpleElectricRebarBlock
 import io.github.pylonmc.rebar.block.interfaces.EntityHolderRebarBlock
 import io.github.pylonmc.rebar.block.interfaces.FurnaceRebarBlockHandler
 import io.github.pylonmc.rebar.block.interfaces.InteractRebarBlockHandler
 import io.github.pylonmc.rebar.block.interfaces.LogisticRebarBlock
-import io.github.pylonmc.rebar.block.interfaces.RecipeProcessorRebarBlock
+import io.github.pylonmc.rebar.block.interfaces.SimpleElectricRebarBlock
 import io.github.pylonmc.rebar.block.interfaces.TickingRebarBlock
 import io.github.pylonmc.rebar.block.interfaces.VirtualInventoryRebarBlock
 import io.github.pylonmc.rebar.event.api.annotation.MultiHandler
 import io.github.pylonmc.rebar.i18n.RebarArgument
 import io.github.pylonmc.rebar.item.builder.ItemStackBuilder
 import io.github.pylonmc.rebar.logistics.LogisticGroupType
-import io.github.pylonmc.rebar.recipe.vanilla.SmeltingRecipeType
 import io.github.pylonmc.rebar.recipe.vanilla.SmeltingRebarRecipe
 import io.github.pylonmc.rebar.util.MachineUpdateReason
 import io.github.pylonmc.rebar.util.gui.GuiItems
@@ -34,6 +32,7 @@ import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataContainer
+import org.bukkit.persistence.PersistentDataType
 import top.mc506lw.rebar.ironfurnaces.IronFurnaceKeys
 import xyz.xenondevs.invui.gui.Gui
 import xyz.xenondevs.invui.inventory.Inventory
@@ -44,13 +43,20 @@ import xyz.xenondevs.invui.window.Window
 import java.util.Locale
 import kotlin.math.min
 
+/**
+ * A furnace smelts one item per active input slot at a time. A normal furnace has a single input
+ * slot, while the factory augment turns it into a machine with up to six input slots that all smelt
+ * in parallel, each with its own progress bar — the same shape as the classic mod's factory mode.
+ *
+ * Rebar's [io.github.pylonmc.rebar.block.interfaces.RecipeProcessorRebarBlock] only tracks a single
+ * recipe, so the smelting state is kept here as one task per slot instead.
+ */
 abstract class AbstractIronFurnace : IronFurnaceBase,
     VirtualInventoryRebarBlock,
     DirectionalRebarBlock,
     TickingRebarBlock,
     LogisticRebarBlock,
     FurnaceRebarBlockHandler,
-    RecipeProcessorRebarBlock<SmeltingRebarRecipe>,
     EntityHolderRebarBlock,
     SimpleElectricRebarBlock,
     BlockBreakRebarBlockHandler,
@@ -92,16 +98,39 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         guiMaterial: Material
     ) : this(block, pdc, furnaceTier, baseMaterial)
 
+    private class SmeltTask {
+        var recipe: SmeltingRebarRecipe? = null
+        var totalTicks = 0
+        var remainingTicks = 0
+
+        val isActive: Boolean
+            get() = recipe != null && remainingTicks > 0
+
+        fun start(recipe: SmeltingRebarRecipe, ticks: Int) {
+            this.recipe = recipe
+            totalTicks = ticks
+            remainingTicks = ticks
+        }
+
+        fun clear() {
+            recipe = null
+            totalTicks = 0
+            remainingTicks = 0
+        }
+    }
+
     companion object {
         private val LOGGER = java.util.logging.Logger.getLogger("IronFurnace")
         private val MACHINE_UPDATE_REASON = MachineUpdateReason()
-        private const val MAX_OUTPUT_SLOTS = 3
+
+        /** Input/output slots a factory furnace can have, i.e. the classic mod's six factory slots. */
+        private const val MAX_FACTORY_SLOTS = 6
     }
 
     override var disableBlockTextureEntity = true
 
-    protected val inputInv = VirtualInventory(1)
-    protected val outputInv = VirtualInventory(MAX_OUTPUT_SLOTS)
+    protected val inputInv = VirtualInventory(MAX_FACTORY_SLOTS)
+    protected val outputInv = VirtualInventory(MAX_FACTORY_SLOTS)
     protected val fuelInv = VirtualInventory(1)
 
     protected val upgradeRedSlot = VirtualInventory(1)
@@ -123,6 +152,9 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
 
     protected val displayRenderer by lazy(LazyThreadSafetyMode.NONE) { createDisplayRenderer() }
 
+    private val tasks = Array(MAX_FACTORY_SLOTS) { SmeltTask() }
+    private val progressItems = Array(MAX_FACTORY_SLOTS) { InvertedProgressItem(GuiItems.background()) }
+
     private val guiFactory by lazy(LazyThreadSafetyMode.NONE) {
         FurnaceGuiFactory(
             furnace = this,
@@ -130,7 +162,6 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
             outputInv = outputInv,
             fuelInv = fuelInv,
             fuelSystem = fuelSystem,
-            recipeProgressItem = recipeProgressItem,
             upgradeRedSlot = upgradeRedSlot,
             upgradeGreenSlot = upgradeGreenSlot,
             upgradeBlueSlot = upgradeBlueSlot
@@ -154,7 +185,9 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         "ironfurnaces.item.${furnaceTier.name.lowercase(Locale.ROOT)}_furnace.name"
     )
     private var runtimeConfigured = false
-    private var activeOutputSlots = 1
+    private var activeSlots = 1
+    private var fuelSlotEnabled = true
+    private var redstoneMode = RedstoneMode.IGNORED
     private var waitingForFuel = false
     private var cachedProgressLabel: String? = null
     private var cachedProgressStack: ItemStack? = null
@@ -163,8 +196,6 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
     }
 
     init {
-        setRecipeType(SmeltingRecipeType)
-        recipeProgressItem = InvertedProgressItem(GuiItems.background())
         setTickInterval(tickInterval)
         upgradeRedSlot.setMaxStackSize(0, 1)
         upgradeGreenSlot.setMaxStackSize(0, 1)
@@ -196,13 +227,39 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
     protected open val rainbowSpeedLabel: String?
         get() = null
 
+    /** Number of input (and output) slots that are currently usable. */
+    internal val activeSlotCount: Int
+        get() = activeSlots
+
+    /** Slots the GUI has to show, i.e. active slots plus any leftovers from a removed upgrade. */
+    internal val displayedSlots: Int
+        get() = maxOf(activeSlots, displayedInputSlots, displayedOutputSlots)
+
     internal val displayedOutputSlots: Int
         get() {
-            for (index in MAX_OUTPUT_SLOTS - 1 downTo activeOutputSlots) {
+            for (index in MAX_FACTORY_SLOTS - 1 downTo activeSlots) {
                 if (outputInv.hasItem(index)) return index + 1
             }
-            return activeOutputSlots
+            return activeSlots
         }
+
+    internal val displayedInputSlots: Int
+        get() {
+            for (index in MAX_FACTORY_SLOTS - 1 downTo activeSlots) {
+                if (inputInv.hasItem(index)) return index + 1
+            }
+            return activeSlots
+        }
+
+    /** False while an energy upgrade is installed, because that mode never burns fuel. */
+    internal val isFuelSlotEnabled: Boolean
+        get() = fuelSlotEnabled
+
+    internal fun progressItem(slot: Int): ProgressItem = progressItems[slot.coerceIn(0, MAX_FACTORY_SLOTS - 1)]
+
+    /** True while at least one slot is smelting; drives the "lit" look of an energy furnace. */
+    internal val isSmelting: Boolean
+        get() = (0 until activeSlots).any { tasks[it].isActive }
 
     protected open fun createDisplayRenderer(): FurnaceDisplayRenderer = FurnaceDisplayRenderer(
         block = block,
@@ -220,7 +277,7 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
 
         val displayType = upgradeManager.getDisplayBlockType()
         displayRenderer.ensureFrontFace(displayType)
-        displayRenderer.updateBurningState(fuelSystem.isBurning, displayType)
+        displayRenderer.updateBurningState(isLit(), displayType)
     }
 
     override fun postLoad() {
@@ -228,7 +285,6 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         configureRuntime()
         upgradeManager.invalidateCache()
         applyUpgradeEffects()
-        restoreProgressItemBehavior()
         fuelSystem.refreshDisplay()
         setupBlockType()
         electricSystem.ensurePorts()
@@ -237,16 +293,30 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         displayRenderer.resetState()
         displayRenderer.ensureFrontFace(displayType)
         displayRenderer.updateFrontFace()
-        displayRenderer.refreshState(fuelSystem.isBurning, displayType)
+        displayRenderer.refreshState(isLit(), displayType)
 
-        reconcileRecipeWithInput()
-        if (!isProcessingRecipe) resetRecipeProgressDisplay()
+        restoreTasks()
+        reconcileTasks()
     }
 
     override fun write(pdc: PersistentDataContainer) {
         super.write(pdc)
         fuelSystem.write(pdc)
         if (energySystemDelegate.isInitialized()) energySystem.write(pdc)
+
+        // Same idea as the classic mod's FactoryCookTime/FactoryTotalCookTime arrays: only the tick
+        // counters are stored, the recipe itself is resolved from the input slot again on load.
+        pdc.set(
+            IronFurnaceKeys.TASK_TICKS_TOTAL,
+            PersistentDataType.INTEGER_ARRAY,
+            IntArray(MAX_FACTORY_SLOTS) { tasks[it].totalTicks }
+        )
+        pdc.set(
+            IronFurnaceKeys.TASK_TICKS_REMAINING,
+            PersistentDataType.INTEGER_ARRAY,
+            IntArray(MAX_FACTORY_SLOTS) { tasks[it].remainingTicks }
+        )
+        pdc.set(IronFurnaceKeys.REDSTONE_MODE, PersistentDataType.INTEGER, redstoneMode.ordinal)
     }
 
     override fun onPostBlockBreak(context: BlockBreakContext) {
@@ -256,41 +326,264 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
     override fun tick() {
         val effects = upgradeManager.calculateEffects()
 
-        when (effects.mode) {
-            FurnaceMode.GENERATOR_ONLY,
-            FurnaceMode.GENERATOR_BLAST,
-            FurnaceMode.GENERATOR_SMOKER -> handleGeneratorTick(effects)
-            else -> handleNormalTick(effects)
+        if (isRedstoneBlocked()) {
+            // The classic mod stops the whole machine; we pause it instead of voiding the progress
+            // and the fuel that is already burning.
+            electricSystem.idle()
+        } else if (isGeneratorMode(effects.mode)) {
+            handleGeneratorTick(effects)
+        } else {
+            handleSmeltTick(effects)
         }
 
-        displayRenderer.updateBurningState(fuelSystem.isBurning, upgradeManager.getDisplayBlockType())
+        displayRenderer.updateBurningState(isLit(), upgradeManager.getDisplayBlockType())
     }
 
-    open fun tryStartSmelting() {
-        if (isProcessingRecipe) return
+    /**
+     * Fills every idle active slot that has a matching input, then advances all of them together, so
+     * a factory furnace smelts up to six items at once — each with its own progress bar.
+     */
+    private fun handleSmeltTick(effects: UpgradeEffects) {
+        if (!effects.canSmelt) {
+            clearAllTasks(effects)
+            return
+        }
 
+        if (!waitingForFuel || effects.usesEnergy) {
+            for (slot in 0 until activeSlots) {
+                if (!tasks[slot].isActive) tryStartTask(slot, effects)
+            }
+        }
+
+        val running = (0 until activeSlots).filter { tasks[it].isActive }
+        if (running.isEmpty()) {
+            if (effects.usesEnergy) electricSystem.idle() else fuelSystem.updateFuelState(tickInterval)
+            return
+        }
+
+        val hadHeat = if (effects.usesEnergy) {
+            // Every running slot draws its own share, so six parallel smelts ask the grid for six
+            // times the power a single smelt would.
+            electricSystem.requiredPower = running.size * powerDraw(effects)
+            electricSystem.isPowered
+        } else {
+            var burning = fuelSystem.isBurning
+            if (!burning) {
+                burning = fuelSystem.consumeFuel()
+                waitingForFuel = !burning
+            }
+            fuelSystem.updateFuelState(tickInterval)
+            burning
+        }
+
+        if (hadHeat) {
+            for (slot in running) progressTask(slot, effects)
+            spawnSmokeParticle()
+        } else if (!effects.usesEnergy) {
+            // Out of fuel: the classic mod winds the progress back instead of voiding it at once.
+            for (slot in running) decayTask(slot, effects)
+        }
+        // An energy furnace simply pauses until the grid supplies the requested power again.
+    }
+
+    private fun handleGeneratorTick(effects: UpgradeEffects) {
+        if (!fuelSystem.isBurning) fuelSystem.consumeFuel()
+
+        if (fuelSystem.isBurning) {
+            val wattsPerTick = furnaceTier.generation * effects.generatorPowerMultiplier
+            energySystem.convertHeatToEnergy(tickInterval.toDouble(), wattsPerTick)
+            // Push the generated power onto Rebar's electric network so nearby machines
+            // can actually draw from this furnace, like the classic mod's energy output.
+            electricSystem.requiredPower = 0.0
+            electricSystem.powerProduced = wattsPerTick
+            fuelSystem.updateFuelState(tickInterval, effects.generatorSpeedMultiplier)
+        } else {
+            electricSystem.idle()
+            fuelSystem.updateFuelState(tickInterval)
+        }
+    }
+
+    /**
+     * A factory furnace spends a fixed amount of energy per item, so the draw per tick is that
+     * amount spread over the furnace's own cook time: a faster furnace pulls more power per tick
+     * but spends the same energy per item, exactly like the classic mod.
+     */
+    private fun powerDraw(effects: UpgradeEffects): Double =
+        FurnaceElectricSystem.ENERGY_PER_ITEM * effects.powerDrawMultiplier / furnaceTier.smeltTimePerItem
+
+    private fun isGeneratorMode(mode: FurnaceMode): Boolean = when (mode) {
+        FurnaceMode.GENERATOR_ONLY,
+        FurnaceMode.GENERATOR_BLAST,
+        FurnaceMode.GENERATOR_SMOKER -> true
+        else -> false
+    }
+
+    /** A factory furnace lights up while smelting; a fuel furnace lights up while burning fuel. */
+    private fun isLit(): Boolean {
+        if (isRedstoneBlocked()) return false
+        return if (fuelSlotEnabled) fuelSystem.isBurning else isSmelting
+    }
+
+    private fun isRedstoneBlocked(): Boolean = when (redstoneMode) {
+        RedstoneMode.IGNORED -> false
+        RedstoneMode.LOW -> block.isBlockPowered
+        RedstoneMode.HIGH -> !block.isBlockPowered
+    }
+
+    /** Starts smelting in every idle slot that has a matching input. */
+    open fun tryStartSmelting() {
         val effects = upgradeManager.calculateEffects()
         if (!effects.canSmelt) return
         if (waitingForFuel && !effects.usesEnergy) return
 
-        val stack = inputInv.getUnsafeItem(0) ?: return
+        for (slot in 0 until activeSlots) {
+            if (!tasks[slot].isActive) tryStartTask(slot, effects)
+        }
+    }
+
+    private fun tryStartTask(slot: Int, effects: UpgradeEffects) {
+        val stack = inputInv.getUnsafeItem(slot) ?: return
         if (stack.isEmpty) return
 
         val compatibility = RecipeDetector.detectRecipeCompatibility(stack)
         if (!upgradeManager.isRecipeCompatible(compatibility)) return
 
-        val previousRecipe = lastRecipe
-        if (previousRecipe != null && tryStartSmelting(previousRecipe, stack, effects)) return
-
         for (recipe in RecipeDetector.matchingFurnaceRecipes(stack)) {
-            if (recipe !== previousRecipe && tryStartSmelting(recipe, stack, effects)) return
+            if (!recipe.ingredient.matchesIgnoringAmount(stack)) continue
+            if (!outputInv.canHold(recipe.result.item)) continue
+
+            tasks[slot].start(recipe, cookTimeTicks(effects))
+            refreshProgress(slot, effects)
+            return
         }
     }
 
-    override fun onRecipeFinished(recipe: SmeltingRebarRecipe) {
-        processRecipeBatch(recipe, 1)
+    private fun cookTimeTicks(effects: UpgradeEffects): Int =
+        (furnaceTier.smeltTimePerItem * effects.smeltTimeModifier).toInt().coerceAtLeast(1)
+
+    private fun progressTask(slot: Int, effects: UpgradeEffects) {
+        val task = tasks[slot]
+
+        // Upgrades can change the cook time mid-smelt; the classic mod re-reads it every tick too.
+        val cookTime = cookTimeTicks(effects)
+        if (task.totalTicks != cookTime) task.totalTicks = cookTime
+
+        task.remainingTicks -= tickInterval
+        if (task.remainingTicks <= 0) {
+            finishTask(slot, effects)
+        } else {
+            refreshProgress(slot, effects)
+        }
+    }
+
+    private fun finishTask(slot: Int, effects: UpgradeEffects) {
+        val task = tasks[slot]
+        val recipe = task.recipe
+        if (recipe != null) {
+            val processed = processRecipeBatch(recipe, slot, batchSizeFor(slot, recipe, effects))
+            if (processed > 0) onBatchProcessed(slot, recipe, processed, effects)
+        }
+        task.clear()
+        refreshProgress(slot, effects)
+        // Pick up the next item straight away so the progress bar does not flash empty in between.
+        tryStartTask(slot, effects)
+    }
+
+    /** Winds a stalled fuel furnace back; the classic mod drains two ticks of progress per tick. */
+    private fun decayTask(slot: Int, effects: UpgradeEffects) {
+        val task = tasks[slot]
+        task.remainingTicks = (task.remainingTicks + tickInterval * 2).coerceAtMost(task.totalTicks)
+        if (task.remainingTicks >= task.totalTicks) {
+            task.clear()
+        }
+        refreshProgress(slot, effects)
+    }
+
+    /** How many items a finished task smelts at once; the rainbow furnace batches with spare fuel. */
+    protected open fun batchSizeFor(
+        slot: Int,
+        recipe: SmeltingRebarRecipe,
+        effects: UpgradeEffects
+    ): Int = 1
+
+    /** Called after a finished task produced [processed] items, so subclasses can charge for them. */
+    protected open fun onBatchProcessed(
+        slot: Int,
+        recipe: SmeltingRebarRecipe,
+        processed: Int,
+        effects: UpgradeEffects
+    ) = Unit
+
+    private fun refreshProgress(slot: Int, effects: UpgradeEffects) {
+        val item = progressItems[slot]
+        val task = tasks[slot]
+        if (task.isActive) {
+            item.setItem(progressDisplay(effects))
+            item.setTotalTimeTicks(task.totalTicks)
+            item.setRemainingTimeTicks(task.remainingTicks)
+        } else {
+            item.setTotalTimeTicks(null)
+            item.setItem(GuiItems.background())
+        }
+    }
+
+    private fun clearAllTasks(effects: UpgradeEffects) {
+        for (slot in 0 until MAX_FACTORY_SLOTS) {
+            if (tasks[slot].isActive) {
+                tasks[slot].clear()
+                refreshProgress(slot, effects)
+            }
+        }
+    }
+
+    /** Drops tasks whose input no longer matches, then starts whatever can be started. */
+    private fun reconcileTasks() {
+        val effects = upgradeManager.calculateEffects()
+        if (!effects.canSmelt) {
+            clearAllTasks(effects)
+            return
+        }
+
+        for (slot in 0 until activeSlots) {
+            val task = tasks[slot]
+            if (!task.isActive) continue
+
+            val stack = inputInv.getUnsafeItem(slot)
+            val recipe = task.recipe
+            val valid = stack != null &&
+                !stack.isEmpty &&
+                recipe != null &&
+                recipe.ingredient.matchesIgnoringAmount(stack) &&
+                upgradeManager.isRecipeCompatible(RecipeDetector.detectRecipeCompatibility(stack))
+            if (!valid) {
+                task.clear()
+                refreshProgress(slot, effects)
+            }
+        }
+
         tryStartSmelting()
-        if (!isProcessingRecipe) resetRecipeProgressDisplay()
+    }
+
+    private fun restoreTasks() {
+        val effects = upgradeManager.calculateEffects()
+        for (slot in 0 until MAX_FACTORY_SLOTS) {
+            val task = tasks[slot]
+            if (slot >= activeSlots || task.totalTicks <= 0) {
+                task.clear()
+                refreshProgress(slot, effects)
+                continue
+            }
+
+            val stack = inputInv.getUnsafeItem(slot)
+            val recipe = if (stack == null || stack.isEmpty) {
+                null
+            } else {
+                RecipeDetector.matchingFurnaceRecipes(stack)
+                    .firstOrNull { it.ingredient.matchesIgnoringAmount(stack) }
+            }
+            if (recipe == null) task.clear() else task.recipe = recipe
+            refreshProgress(slot, effects)
+        }
     }
 
     @MultiHandler(priorities = [EventPriority.LOWEST])
@@ -315,7 +608,22 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
             .open()
     }
 
-    override fun getWaila(player: Player): WailaDisplay = WailaDisplay.of(this, player)
+    /** Current redstone gate, shown by the button in the bottom-right of the furnace GUI. */
+    internal val currentRedstoneMode: RedstoneMode
+        get() = redstoneMode
+
+    internal fun cycleRedstoneMode(): RedstoneMode {
+        redstoneMode = redstoneMode.next()
+        return redstoneMode
+    }
+
+    override fun getWaila(player: Player): WailaDisplay {
+        val display = WailaDisplay.of(this, player)
+        if (redstoneMode != RedstoneMode.IGNORED) {
+            display.add(Component.translatable(redstoneMode.translationKey))
+        }
+        return display
+    }
 
     override fun getVirtualInventories(): Map<String, VirtualInventory> = inventoryMap
 
@@ -327,10 +635,10 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         block.world.spawnParticle(Particle.SMOKE, smokeParticleLocation, 1, 0.1, 0.2, 0.1, 0.01)
     }
 
-    protected fun processRecipeBatch(recipe: SmeltingRebarRecipe, requestedItems: Int): Int {
+    protected fun processRecipeBatch(recipe: SmeltingRebarRecipe, slot: Int, requestedItems: Int): Int {
         if (requestedItems <= 0) return 0
 
-        val input = inputInv.getUnsafeItem(0) ?: return 0
+        val input = inputInv.getUnsafeItem(slot) ?: return 0
         if (input.isEmpty || !recipe.ingredient.matchesIgnoringAmount(input)) return 0
 
         val result = recipe.result.item
@@ -353,7 +661,7 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
 
         val remainingInput = input.amount - batchSize
         val updatedInput = if (remainingInput == 0) null else input.clone().apply { amount = remainingInput }
-        if (!inputInv.setItem(MACHINE_UPDATE_REASON, 0, updatedInput)) {
+        if (!inputInv.setItem(MACHINE_UPDATE_REASON, slot, updatedInput)) {
             outputInv.removeFirstSimilar(MACHINE_UPDATE_REASON, combinedResult.amount, result)
             LOGGER.warning("[${furnaceTier.name}] ${block.location} 输入库存更新失败，已回滚烧炼结果")
             return 0
@@ -364,7 +672,7 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
 
     private fun availableOutputBatches(result: ItemStack): Int {
         var availableItems = 0
-        for (slot in 0 until activeOutputSlots) {
+        for (slot in 0 until activeSlots) {
             val current = outputInv.getUnsafeItem(slot)
             val maxStackSize = outputInv.getMaxStackSize(slot, result)
             availableItems += when {
@@ -392,7 +700,7 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         inputInv.addPostUpdateHandler { event ->
             if (event.updateReason !is MachineUpdateReason) {
                 waitingForFuel = false
-                reconcileRecipeWithInput()
+                reconcileTasks()
             }
         }
         fuelInv.addPostUpdateHandler { event ->
@@ -423,13 +731,7 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         upgradeManager.invalidateCache()
         applyUpgradeEffects()
         displayRenderer.updateDisplayType(upgradeManager.getDisplayBlockType())
-
-        if (!upgradeManager.calculateEffects().canSmelt && isProcessingRecipe) {
-            stopRecipe()
-            resetRecipeProgressDisplay()
-        } else {
-            reconcileRecipeWithInput()
-        }
+        reconcileTasks()
     }
 
     private fun applyUpgradeEffects() {
@@ -437,15 +739,37 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         fuelSystem.fuelConsumptionRate = effects.fuelConsumptionRate
         fuelSystem.fuelEfficiency = effects.fuelEfficiencyBonus
         fuelSystem.speedMultiplier = effects.speedMultiplier
+        // Generator furnaces burn a fuel for its full burn time regardless of how fast the furnace
+        // is, so that a higher tier really does yield more energy per fuel.
+        fuelSystem.tierSpeedScaling = !isGeneratorMode(effects.mode)
 
-        activeOutputSlots = effects.outputSlots.coerceIn(1, MAX_OUTPUT_SLOTS)
-        for (slot in 0 until MAX_OUTPUT_SLOTS) {
+        // A factory furnace gets as many slots as its tier unlocks (2, 4 or 6); anything else
+        // smelts a single item at a time.
+        val previousSlots = activeSlots
+        activeSlots = if (effects.usesEnergy) {
+            min(effects.inputSlots, furnaceTier.factorySlots).coerceAtLeast(1)
+        } else {
+            1
+        }
+        fuelSlotEnabled = !effects.usesEnergy
+
+        for (slot in 0 until MAX_FACTORY_SLOTS) {
             outputInv.setMaxStackSize(
                 slot,
-                if (slot < activeOutputSlots) Inventory.DEFAULT_MAX_STACK_SIZE else 0
+                if (slot < activeSlots) Inventory.DEFAULT_MAX_STACK_SIZE else 0
             )
         }
         outputInv.notifyWindows()
+
+        if (activeSlots < previousSlots) {
+            // Slots the furnace can no longer use lose their progress; their items stay put and are
+            // shown again by the GUI so nothing gets trapped.
+            for (slot in activeSlots until previousSlots) {
+                tasks[slot].clear()
+                refreshProgress(slot, effects)
+            }
+        }
+
         cachedProgressLabel = null
         cachedProgressStack = null
 
@@ -454,111 +778,9 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         if (electricSystem.hasPorts) electricSystem.idle()
     }
 
-    private fun handleNormalTick(effects: UpgradeEffects) {
-        if (!effects.canSmelt) return
-
-        if (isProcessingRecipe) {
-            val input = inputInv.getUnsafeItem(0)
-            if (input == null || input.isEmpty) {
-                stopRecipe()
-                resetRecipeProgressDisplay()
-            }
-        }
-
-        tryStartSmelting()
-
-        var hadHeat: Boolean
-        if (effects.usesEnergy) {
-            // Industrial furnaces run on grid power: request it while smelting and only
-            // advance once Rebar's network confirms the demand is met.
-            hadHeat = if (isProcessingRecipe) {
-                electricSystem.requiredPower =
-                    FurnaceElectricSystem.BASE_REQUIRED_POWER_PER_TICK * effects.speedMultiplier
-                electricSystem.isPowered
-            } else {
-                electricSystem.requiredPower = 0.0
-                false
-            }
-        } else {
-            hadHeat = fuelSystem.isBurning
-            if (!hadHeat && isProcessingRecipe) {
-                hadHeat = fuelSystem.consumeFuel()
-                waitingForFuel = !hadHeat
-            }
-            fuelSystem.updateFuelState(tickInterval)
-        }
-
-        if (isProcessingRecipe && hadHeat) {
-            progressRecipe(tickInterval)
-            spawnSmokeParticle()
-        } else if (isProcessingRecipe) {
-            stopRecipe()
-            resetRecipeProgressDisplay()
-        }
-    }
-
-    private fun handleGeneratorTick(effects: UpgradeEffects) {
-        if (!fuelSystem.isBurning) fuelSystem.consumeFuel()
-
-        if (fuelSystem.isBurning) {
-            val produced = energySystem.convertHeatToEnergy(
-                tickInterval.toDouble(),
-                effects.generatorPowerMultiplier
-            )
-            // Push the generated power onto Rebar's electric network so nearby machines
-            // can actually draw from this furnace, like the classic mod's energy output.
-            electricSystem.requiredPower = 0.0
-            electricSystem.powerProduced = if (produced > 0.0) {
-                produced / tickInterval.coerceAtLeast(1)
-            } else {
-                FurnaceElectricSystem.BASE_POWER_PER_TICK * effects.generatorPowerMultiplier
-            }
-            fuelSystem.updateFuelState(tickInterval, effects.generatorSpeedMultiplier)
-        } else {
-            electricSystem.idle()
-            fuelSystem.updateFuelState(tickInterval)
-        }
-    }
-
-    private fun reconcileRecipeWithInput() {
-        if (isProcessingRecipe) {
-            val input = inputInv.getUnsafeItem(0)
-            val recipe = currentRecipe
-            val effects = upgradeManager.calculateEffects()
-            val isValid = effects.canSmelt &&
-                input != null &&
-                !input.isEmpty &&
-                recipe != null &&
-                recipe.ingredient.matchesIgnoringAmount(input) &&
-                upgradeManager.isRecipeCompatible(RecipeDetector.detectRecipeCompatibility(input))
-            if (!isValid) {
-                stopRecipe()
-                resetRecipeProgressDisplay()
-            }
-        }
-        tryStartSmelting()
-    }
-
-    private fun tryStartSmelting(
-        recipe: SmeltingRebarRecipe,
-        stack: ItemStack,
-        effects: UpgradeEffects
-    ): Boolean {
-        if (!recipe.ingredient.matchesIgnoringAmount(stack) || !outputInv.canHold(recipe.result.item)) return false
-
-        val actualTime = (furnaceTier.smeltTimePerItem * effects.smeltTimeModifier)
-            .toInt()
-            .coerceAtLeast(1)
-        recipeProgressItem.setItem(progressDisplay(effects))
-        startRecipe(recipe, actualTime)
-        return true
-    }
-
     private fun progressDisplay(effects: UpgradeEffects): ItemStack {
         val label = rainbowSpeedLabel ?: run {
-            val effectiveTime = (furnaceTier.smeltTimePerItem * effects.smeltTimeModifier)
-                .toInt()
-                .coerceAtLeast(1)
+            val effectiveTime = cookTimeTicks(effects)
             val multiplier = 200.0 / effectiveTime
             if (multiplier == multiplier.toInt().toDouble()) {
                 "${multiplier.toInt()}x"
@@ -585,20 +807,6 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
             }
     }
 
-    private fun resetRecipeProgressDisplay() {
-        recipeProgressItem.setItem(GuiItems.background())
-    }
-
-    private fun restoreProgressItemBehavior() {
-        val replacement = InvertedProgressItem(GuiItems.background())
-        recipeProgressItem = replacement
-        recipeTimeTicks?.let(replacement::setTotalTimeTicks)
-        recipeTicksRemaining?.let(replacement::setRemainingTimeTicks)
-        if (isProcessingRecipe) {
-            replacement.setItem(progressDisplay(upgradeManager.calculateEffects()))
-        }
-    }
-
     private fun validateUpgradePlacement(event: ItemPreUpdateEvent, slotIndex: Int) {
         val newItem = event.newItem ?: return
         if (newItem.isEmpty) return
@@ -613,6 +821,20 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
         fuelSystem.restore(pdc)
         if (pdc.has(IronFurnaceKeys.ENERGY_CURRENT) || pdc.has(IronFurnaceKeys.ENERGY_TOTAL_PRODUCED)) {
             energySystem.restore(pdc)
+        }
+        redstoneMode = RedstoneMode.fromOrdinal(
+            pdc.getOrDefault(IronFurnaceKeys.REDSTONE_MODE, PersistentDataType.INTEGER, 0)
+        )
+
+        val totals = pdc.get(IronFurnaceKeys.TASK_TICKS_TOTAL, PersistentDataType.INTEGER_ARRAY)
+        val remaining = pdc.get(IronFurnaceKeys.TASK_TICKS_REMAINING, PersistentDataType.INTEGER_ARRAY)
+        if (totals == null || remaining == null) return
+
+        for (slot in 0 until minOf(MAX_FACTORY_SLOTS, totals.size, remaining.size)) {
+            if (totals[slot] > 0 && remaining[slot] > 0) {
+                tasks[slot].totalTicks = totals[slot]
+                tasks[slot].remainingTicks = remaining[slot]
+            }
         }
     }
 }

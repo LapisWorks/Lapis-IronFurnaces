@@ -40,7 +40,7 @@ item:
     name: "<aqua>速度升级"
     lore: |-
       <gray>烧炼时间减半
-      <gray>燃料消耗增加50%
+      <gray>燃料消耗翻倍
 
   fuel_upgrade:
     name: "<gold>燃料升级"
@@ -49,10 +49,11 @@ item:
       <gray>烧炼时间增加25%
 
   industrial_upgrade:
-    name: "<gray>工业升级"
+    name: "<gray>工厂升级"
     lore: |-
-      <gray>增加输出槽位到3个
-      <gray>支持自动化输出
+      <gray>输入/输出槽位增加至 6 个（按等级开放 2/4/6）
+      <gray>每个输入槽独立并行烧炼
+      <gray>禁用燃料槽，改为电力驱动
 
   generator_upgrade:
     name: "<red>发电机升级"
@@ -135,15 +136,26 @@ gui:
 
   upgrade_blue:
     name: "<blue>🔵 扩展功能"
-    lore: "<gray>工业/发电机升级"
+    lore: "<gray>工厂/发电机升级"
 
   back_button:
     name: "<gray>← 返回"
     lore: ""
 
+  redstone:
+    name: "<red>🔌 红石控制"
+    lore: "<gray>当前模式：<white>%mode%"
+    hint: "<gray><insn>点击</insn>切换模式"
+
   no_item: "<gray>无物品"
 
+redstone:
+  ignored: "<gray>红石：忽略"
+  low: "<gray>红石：有信号时停止"
+  high: "<gray>红石：仅有信号时工作"
+
 message:
+  redstone_mode: "<yellow>红石模式已切换为 %mode%"
   upgrade_success: "<green>成功升级为 %furnace%!"
   upgrade_failed: "<red>升级失败！请检查材料是否齐全。"
   upgrade_already_max: "<yellow>该熔炉已是最高等级。"

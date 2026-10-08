@@ -2,7 +2,6 @@ package top.mc506lw.rebar.ironfurnaces.furnace
 
 import io.github.pylonmc.rebar.block.context.BlockCreateContext
 import io.github.pylonmc.rebar.recipe.vanilla.SmeltingRebarRecipe
-import io.github.pylonmc.rebar.util.gui.GuiItems
 import org.bukkit.Color
 import org.bukkit.Material
 import org.bukkit.Particle
@@ -113,15 +112,21 @@ class RainbowFurnace : AbstractIronFurnace {
         )
     }
 
-    override fun onRecipeFinished(recipe: SmeltingRebarRecipe) {
-        val maximumByFuel = max(1, (fuelRemaining + tickInterval - 1) / tickInterval)
-        val processed = processRecipeBatch(recipe, maximumByFuel)
+    /**
+     * The rainbow furnace spends its spare fuel the moment a task finishes and smelts a whole batch
+     * at once, instead of one item per task.
+     */
+    override fun batchSizeFor(slot: Int, recipe: SmeltingRebarRecipe, effects: UpgradeEffects): Int =
+        max(1, (fuelRemaining + tickInterval - 1) / tickInterval)
 
+    override fun onBatchProcessed(
+        slot: Int,
+        recipe: SmeltingRebarRecipe,
+        processed: Int,
+        effects: UpgradeEffects
+    ) {
         if (processed > 0) {
             fuelRemaining = (fuelRemaining - processed * tickInterval).coerceAtLeast(0)
         }
-
-        tryStartSmelting()
-        if (!isProcessingRecipe) recipeProgressItem.setItem(GuiItems.background())
     }
 }

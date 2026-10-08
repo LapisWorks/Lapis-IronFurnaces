@@ -37,4 +37,11 @@ object IronFurnaceKeys {
     val ENERGY_TOTAL_PRODUCED = key("energy_total_produced")
     val RAINBOW_COLOR_INDEX = key("rainbow_color_index")
     val RAINBOW_COLOR_TICK = key("rainbow_color_tick")
+
+    /** Per-slot smelting progress of the factory slots, mirroring the mod's FactoryCookTime arrays. */
+    val TASK_TICKS_TOTAL = key("task_ticks_total")
+    val TASK_TICKS_REMAINING = key("task_ticks_remaining")
+
+    /** The classic mod's redstone setting (ignored / stop on signal / run only on signal). */
+    val REDSTONE_MODE = key("redstone_mode")
 }

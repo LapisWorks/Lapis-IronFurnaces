@@ -67,13 +67,20 @@ class FurnaceFuelSystem(
             field = value.takeIf { it.isFinite() && it > 0.0 } ?: 1.0
         }
 
+    /**
+     * Whether the furnace's own speed shortens how long a fuel burns. Smelting furnaces scale the
+     * burn time with their speed (so every tier smelts the same number of items per fuel), while
+     * generator furnaces burn the fuel for its full burn time so higher tiers produce more energy.
+     */
+    var tierSpeedScaling = true
+
     val fuelProgressItem = ProgressItem(GuiItems.background())
 
     val isBurning: Boolean
         get() = fuelRemaining > 0
 
     val totalSpeedMultiplier: Double
-        get() = furnaceTier.speedMultiplier * speedMultiplier
+        get() = if (tierSpeedScaling) furnaceTier.speedMultiplier * speedMultiplier else speedMultiplier
 
     private var burningFuelType: Material? = null
     private var consumptionFraction = 0.0

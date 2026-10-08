@@ -21,6 +21,12 @@ data class UpgradeEffects(
     val fuelConsumptionRate: Double = 1.0,
     val fuelEfficiencyBonus: Double = 1.0,
     val smeltTimeModifier: Double = 1.0,
+    /**
+     * Multiplier on the energy a factory furnace spends per item, mirroring the classic mod's
+     * green augment handling (`energyRecipe * 2` for speed, `energyRecipe / 2` for fuel).
+     */
+    val powerDrawMultiplier: Double = 1.0,
+    val inputSlots: Int = 1,
     val outputSlots: Int = 1,
     val usesEnergy: Boolean = false,
     val generatorPowerMultiplier: Double = 1.0,
@@ -140,7 +146,7 @@ internal object UpgradeEffectCalculator {
         if (hasSpeed) {
             speedMultiplier *= 2.0
             smeltTimeModifier *= 0.5
-            fuelConsumptionRate *= 1.5
+            fuelConsumptionRate *= 2.0
         }
         if (hasFuel) {
             fuelEfficiency *= 2.0
@@ -171,7 +177,7 @@ internal object UpgradeEffectCalculator {
             }
             hasSpeed -> {
                 speedMultiplier = 4.0
-                fuelConsumptionRate = 3.0
+                fuelConsumptionRate = 4.0
                 smeltTimeModifier *= 0.5
             }
             hasFuel -> {
@@ -196,12 +202,19 @@ internal object UpgradeEffectCalculator {
     ): UpgradeEffects {
         var speedMultiplier = 1.0
         var smeltTimeModifier = 1.0
+        var powerDrawMultiplier = 1.0
 
+        // Blasting/smoking recipes are 100 ticks in vanilla, i.e. half of a smelting recipe.
+        if (hasBlast || hasSmoker) smeltTimeModifier *= 0.5
         if (hasSpeed) {
             speedMultiplier *= 2.0
             smeltTimeModifier *= 0.5
+            powerDrawMultiplier *= 4.0
         }
-        if (hasFuel) smeltTimeModifier *= 1.25
+        if (hasFuel) {
+            smeltTimeModifier *= 1.25
+            powerDrawMultiplier *= 0.4
+        }
 
         return UpgradeEffects(
             mode = when {
@@ -211,7 +224,11 @@ internal object UpgradeEffectCalculator {
             },
             speedMultiplier = speedMultiplier,
             smeltTimeModifier = smeltTimeModifier,
-            outputSlots = 3,
+            powerDrawMultiplier = powerDrawMultiplier,
+            // The factory layout has six slots; how many of them a given furnace unlocks depends on
+            // its tier, so the furnace clamps this against its own factory slot count.
+            inputSlots = 6,
+            outputSlots = 6,
             usesEnergy = true
         )
     }
@@ -225,12 +242,12 @@ internal object UpgradeEffectCalculator {
         var speedMultiplier = 1.0
 
         if (hasSpeed) {
-            powerMultiplier *= 0.25
+            powerMultiplier *= 2.0
             speedMultiplier *= 2.0
         }
         if (hasFuel) {
-            powerMultiplier *= 2.0
-            speedMultiplier *= 0.75
+            powerMultiplier *= 0.75
+            speedMultiplier *= 0.5
         }
 
         return UpgradeEffects(

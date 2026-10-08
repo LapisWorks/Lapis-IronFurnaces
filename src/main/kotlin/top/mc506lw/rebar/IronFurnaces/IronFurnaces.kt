@@ -4,6 +4,7 @@ import io.github.pylonmc.rebar.addon.RebarAddon
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.plugin.java.JavaPlugin
+import top.mc506lw.rebar.ironfurnaces.furnace.GolemStructureGuard
 import top.mc506lw.rebar.ironfurnaces.furnace.RecipeDetector
 import java.util.Locale
 
@@ -22,6 +23,8 @@ class IronFurnaces : JavaPlugin(), RebarAddon {
         IronFurnaceBlocks.initialize()
         FurnaceRecipes.initialize()
         IronFurnacePages.initialise()
+
+        server.pluginManager.registerEvents(GolemStructureGuard(), this)
     }
 
     override fun onDisable() {

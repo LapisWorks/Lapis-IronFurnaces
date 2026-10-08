@@ -1,54 +1,75 @@
 package top.mc506lw.rebar.ironfurnaces.furnace
 
 import io.github.pylonmc.rebar.block.interfaces.SimpleElectricRebarBlock
+import io.github.pylonmc.rebar.electricity.nodes.ElectricConsumerNode
 import io.github.pylonmc.rebar.electricity.nodes.ElectricNodeType
+import io.github.pylonmc.rebar.electricity.nodes.ElectricProducerNode
+import io.github.pylonmc.rebar.util.position.position
 import org.bukkit.block.BlockFace
 
 /**
  * Bridges an iron furnace to Rebar's electric network.
  *
- * Mirrors the classic Iron Furnaces mod, where a furnace block exposes a Forge energy
- * capability: a generator-upgraded furnace feeds power into the network, while an
- * industrial (energy-powered) furnace draws power from it.
+ * Mirrors the classic Iron Furnaces mod, where a furnace block exposes a Forge energy capability:
+ * a generator-upgraded furnace feeds power into the network, while an industrial (energy-powered)
+ * furnace draws power from it.
  *
- * Both ports are created once and stay attached for the lifetime of the block; the
- * active upgrade configuration only changes how much power is produced or requested,
- * which maps directly onto [SimpleElectricRebarBlock.powerProduced] and
- * [SimpleElectricRebarBlock.requiredPower].
+ * The furnace only ever exposes a *single* terminal, on the top face, exactly like Pylon's electric
+ * furnace. The terminal itself is a plain connector; the producing and consuming nodes are attached
+ * to it internally, so the same terminal can both push power out and pull power in depending on the
+ * installed upgrade.
  */
 class FurnaceElectricSystem(
     private val block: SimpleElectricRebarBlock
 ) {
     companion object {
         /**
-         * FE/tick produced by a generator furnace at 1x, matching the classic mod's
-         * 16000 FE heater charge lasting 1600 furnace ticks.
+         * Joules a factory furnace spends on one item of a 200-tick recipe, matching the classic
+         * mod's `recipe.getCookingTime() * 20`. Because the draw per tick is this amount divided by
+         * the furnace's cook time, a faster furnace pulls proportionally more power per tick while
+         * still spending the same energy per item.
          */
-        const val BASE_POWER_PER_TICK = 10.0
+        const val ENERGY_PER_ITEM = 4000.0
 
-        /** FE/tick drawn by an industrial furnace smelting at 1x. */
-        const val BASE_REQUIRED_POWER_PER_TICK = 20.0
+        /**
+         * Rebar places the port's model at `radius * 1.02` from the block centre, so 0.5 (Rebar's
+         * own default, and what Pylon's electric furnace uses) puts the plate just proud of the
+         * block face. The previous 0.35 sank it inside the block, where the opaque metal body hid
+         * it completely.
+         */
+        private const val PORT_RADIUS = 0.5
+        private val PORT_FACE = BlockFace.UP
 
-        private const val PORT_RADIUS = 0.35
+        private const val PORT_NODE = "connector_0"
+        private const val PRODUCER_NODE = "producer_0"
+        private const val CONSUMER_NODE = "consumer_0"
     }
 
     private var portsCreated = false
 
-    /** Creates the producer/consumer ports exactly once, on opposite horizontal faces. */
+    /**
+     * Creates the single terminal exactly once. Ports are never re-created for an existing block:
+     * Rebar restores the stored nodes from the block data on load, and creating them again would
+     * leave a duplicate, unreachable set of nodes behind.
+     */
     fun ensurePorts() {
         if (portsCreated) return
-        if (block.electricNodes.any { it is io.github.pylonmc.rebar.electricity.nodes.ElectricProducerNode }) {
-            portsCreated = true
-            return
-        }
         portsCreated = true
 
-        block.createSimpleElectricPort(ElectricNodeType.PRODUCER, BlockFace.UP, PORT_RADIUS)
-        block.createSimpleElectricPort(ElectricNodeType.CONSUMER, BlockFace.DOWN, PORT_RADIUS)
-        block.createSimpleElectricPort(ElectricNodeType.CONNECTOR, BlockFace.NORTH, PORT_RADIUS)
-        block.createSimpleElectricPort(ElectricNodeType.CONNECTOR, BlockFace.SOUTH, PORT_RADIUS)
-        block.createSimpleElectricPort(ElectricNodeType.CONNECTOR, BlockFace.EAST, PORT_RADIUS)
-        block.createSimpleElectricPort(ElectricNodeType.CONNECTOR, BlockFace.WEST, PORT_RADIUS)
+        // The port has to be created first: it is the node that ends up being named "connector_0".
+        if (block.getElectricNode(PORT_NODE) == null) {
+            block.createSimpleElectricPort(ElectricNodeType.CONNECTOR, PORT_FACE, PORT_RADIUS)
+        }
+
+        // Adding a node through the simple API also links it to the block's internal connector, so
+        // both of these end up reachable through the single top terminal.
+        val position = block.block.position
+        if (block.getElectricNode(PRODUCER_NODE) == null) {
+            block.addElectricNode(ElectricProducerNode(PRODUCER_NODE, position, 0.0))
+        }
+        if (block.getElectricNode(CONSUMER_NODE) == null) {
+            block.addElectricNode(ElectricConsumerNode(CONSUMER_NODE, position, 0.0))
+        }
     }
 
     val hasPorts: Boolean

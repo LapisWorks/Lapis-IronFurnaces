@@ -40,7 +40,7 @@ item:
     name: "<b>Speed Upgrade"
     lore: |-
       <gray>Halves smelting time
-      <gray>Increases fuel consumption by 50%
+      <gray>Doubles fuel consumption
 
   fuel_upgrade:
     name: "<6>Fuel Upgrade"
@@ -49,10 +49,11 @@ item:
       <gray>Increases smelting time by 25%
 
   industrial_upgrade:
-    name: "<7>Industrial Upgrade"
+    name: "<7>Factory Upgrade"
     lore: |-
-      <gray>Adds 3 output slots
-      <gray>Supports automated output
+      <gray>Adds up to 6 input and output slots (2/4/6 by tier)
+      <gray>Every input slot smelts in parallel
+      <gray>Removes the fuel slot, runs on power instead
 
   generator_upgrade:
     name: "<c>Generator Upgrade"
@@ -129,6 +130,11 @@ gui:
     name: "<yellow>← Back"
     lore: ""
 
+  redstone:
+    name: "<red>🔌 Redstone control"
+    lore: "<gray>Current mode: <white>%mode%"
+    hint: "<gray><insn>Click</insn> to cycle"
+
   upgrade_red:
     name: "<red>🔴 Special Smelting"
     lore: "<gray>Blast furnace / Smoker component"
@@ -139,11 +145,17 @@ gui:
 
   upgrade_blue:
     name: "<blue>🔵 Extensions"
-    lore: "<gray>Industrial / Generator upgrade"
+    lore: "<gray>Factory / Generator upgrade"
 
   no_item: "<gray>No items"
 
+redstone:
+  ignored: "<gray>Redstone: ignored"
+  low: "<gray>Redstone: stops on signal"
+  high: "<gray>Redstone: runs only on signal"
+
 message:
+  redstone_mode: "<yellow>Redstone mode: %mode%"
   upgrade_success: "<green>Successfully upgraded to %furnace%!"
   upgrade_failed: "<red>Upgrade failed! Check your materials."
   upgrade_already_max: "<yellow>This furnace is already max level."

@@ -63,11 +63,11 @@ class FurnaceEnergySystem(
 
     override fun getProductionRate(): Double = lastProductionRate
 
-    fun convertHeatToEnergy(heatAmount: Double, multiplier: Double = 1.0): Double {
-        if (!heatAmount.isFinite() || !multiplier.isFinite() || heatAmount <= 0.0 || multiplier <= 0.0) {
+    fun convertHeatToEnergy(heatAmount: Double, wattsPerTick: Double): Double {
+        if (!heatAmount.isFinite() || !wattsPerTick.isFinite() || heatAmount <= 0.0 || wattsPerTick <= 0.0) {
             return 0.0
         }
-        val produced = heatAmount * 10.0 * multiplier
+        val produced = heatAmount * wattsPerTick
         produceEnergy(produced)
         return produced
     }

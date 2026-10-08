@@ -19,24 +19,41 @@ open class FurnaceDisplayRenderer(
 ) {
     companion object {
         private const val FRONT_FACE_ENTITY_NAME = "furnace_front"
-        private const val FRONT_OFFSET = 0.499
+
+        /**
+         * The panel is a thin slab sitting on the block face. Its outer surface ends up at
+         * `FRONT_OFFSET + FRONT_THICKNESS_SCALE / 2` = 0.502, i.e. 2mm proud of the block's own
+         * surface at 0.5 — enough to stay visible and clear of z-fighting, while protruding less
+         * than the original 0.499 offset did. Anything below 0.495 sinks the panel *into* the metal
+         * block, where the opaque block hides it completely.
+         */
+        private const val FRONT_OFFSET = 0.497
+
+        /** Panel thickness along the block's normal axis. */
+        private const val FRONT_THICKNESS_SCALE = 0.01
+
+        /**
+         * The panel is also shrunk slightly in the two in-plane axes, so it reads as a recessed
+         * furnace front framed by the metal block rather than a plate covering the whole face.
+         */
+        private const val FRONT_RADIAL_SCALE = 0.98
 
         fun getFrontFaceTransformation(facing: BlockFace): TransformBuilder = when (facing) {
             BlockFace.NORTH -> TransformBuilder()
                 .translate(0.0, 0.0, -FRONT_OFFSET)
-                .scale(1.0, 1.0, 0.01)
+                .scale(FRONT_RADIAL_SCALE, FRONT_RADIAL_SCALE, FRONT_THICKNESS_SCALE)
             BlockFace.SOUTH -> TransformBuilder()
                 .translate(0.0, 0.0, FRONT_OFFSET)
-                .scale(1.0, 1.0, 0.01)
+                .scale(FRONT_RADIAL_SCALE, FRONT_RADIAL_SCALE, FRONT_THICKNESS_SCALE)
             BlockFace.EAST -> TransformBuilder()
                 .translate(FRONT_OFFSET, 0.0, 0.0)
-                .scale(0.01, 1.0, 1.0)
+                .scale(FRONT_THICKNESS_SCALE, FRONT_RADIAL_SCALE, FRONT_RADIAL_SCALE)
             BlockFace.WEST -> TransformBuilder()
                 .translate(-FRONT_OFFSET, 0.0, 0.0)
-                .scale(0.01, 1.0, 1.0)
+                .scale(FRONT_THICKNESS_SCALE, FRONT_RADIAL_SCALE, FRONT_RADIAL_SCALE)
             else -> TransformBuilder()
                 .translate(0.0, 0.0, -FRONT_OFFSET)
-                .scale(1.0, 1.0, 0.01)
+                .scale(FRONT_RADIAL_SCALE, FRONT_RADIAL_SCALE, FRONT_THICKNESS_SCALE)
         }
 
         private fun horizontalFacing(facing: BlockFace): BlockFace = when (facing) {

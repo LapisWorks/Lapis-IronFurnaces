@@ -31,11 +31,12 @@ class FurnaceEnergySystemTest {
     }
 
     @Test
-    fun `heat conversion applies multiplier`() {
+    fun `heat conversion is heat times watts per tick`() {
         val energy = FurnaceEnergySystem(maxCapacity = 1_000.0)
 
-        assertEquals(100.0, energy.convertHeatToEnergy(5.0, 2.0))
+        assertEquals(100.0, energy.convertHeatToEnergy(5.0, 20.0))
         assertEquals(100.0, energy.retrieveCurrentEnergy())
-        assertEquals(0.0, energy.convertHeatToEnergy(-1.0, 2.0))
+        assertEquals(0.0, energy.convertHeatToEnergy(-1.0, 20.0))
+        assertEquals(0.0, energy.convertHeatToEnergy(5.0, -1.0))
     }
 }
