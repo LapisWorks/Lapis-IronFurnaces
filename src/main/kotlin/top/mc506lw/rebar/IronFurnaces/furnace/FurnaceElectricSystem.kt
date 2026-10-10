@@ -96,10 +96,35 @@ class FurnaceElectricSystem(
      *
      * 注意：不能只看 `block.isPowered`。Rebar 的 `ElectricConsumerNode.isPowered` 只是一个普通
      * boolean 字段，由**网络 tick** 时写入；而没接线时这个节点根本不进任何网络，字段就会一直保持
-     * 初始值 `true` —— 表现就是"一台电都没接的工厂炉照样在烧"。所以这里额外要求端子上真的挂着电线。
+     * 初始值 `true` —— 表现就是"一台电都没接的工厂炉照样在烧"。所以这里额外要求端子上真的接了东西。
+     *
+     * ## ⚠️ 不能只认 Rebar 的电线（旧实现的坑）
+     *
+     * 旧实现用的是 `FurnaceWires.hasAnyWire(...)`，它只遍历 `WireEntity.loadedWires` ——
+     * **只认 Rebar 自己的电线实体**。而第三方电力设备（比如 Lapis-Pipez 的能量管道）
+     * 是通过 `ElectricNode.connect` 直接挂到端子的 connector 上的，**根本没有 WireEntity**。
+     * 于是用管道供电时 `hasAnyWire` 恒为 false → `isPowered` 恒为 false →
+     * 电明明送到了（存储盒在掉电），熔炉却一动不动。
+     *
+     * 现在改成看**电学上的事实**：本方块自己的节点有没有连到"外部节点"
+     * （不属于本方块的节点）。电线、管道、别的附属都算，一律通用。
      */
     val isPowered: Boolean
-        get() = portsCreated && FurnaceWires.hasAnyWire(block.block.location.toCenterLocation()) && block.isPowered
+        get() = portsCreated && hasExternalConnection() && block.isPowered
+
+    /**
+     * 端子有没有接**外部**电源 —— 电线 / 管道 / 别的附属都算。
+     *
+     * 判据：本方块自己的任意一个节点，连到了**不属于本方块**的节点。
+     * （`addElectricNode` 会把 producer/consumer 内部连到 connector，
+     * 所以光看"有没有连接"不够，必须把这些内部节点排除掉。）
+     */
+    private fun hasExternalConnection(): Boolean {
+        val own = block.electricNodes.mapTo(HashSet()) { it.id }
+        return block.electricNodes.any { node ->
+            node.connections.any { it !in own }
+        }
+    }
 
     /** Stops both producing and consuming, e.g. when idling or out of fuel. */
     fun idle() {

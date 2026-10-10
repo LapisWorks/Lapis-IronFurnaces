@@ -334,15 +334,23 @@ abstract class AbstractIronFurnace : IronFurnaceBase,
     }
 
     override fun onPostBlockBreak(context: BlockBreakContext) {
-        tryRemoveAllEntities()
+        // 这里**不要**自己删实体。`onPostBlockBreak` 跑在 `RebarBlockBreakEvent` 之前，而端口实体
+        // （ElectricPortEntity）被移除时会注销自己的 RebarElectricNodeRemoveEvent 监听器；一旦它先没了，
+        // Rebar 的 `ElectricRebarBlock.onBreak` → 端口实体 `onNodeRemove` → `dropConnectedWires`
+        // 就整个被跳过，挂在熔炉端子上的电线会留在原地指向已消失的节点（悬空线）。
+        //
+        // 实体交给 Rebar 的 `EntityHolderRebarBlock.onBreak`（MONITOR 优先级，在 RebarBlockBreakEvent
+        // 里、所有 break handler 之后）去删，和以前的效果一样，只是晚几步。
         removeConnectedWires()
     }
 
     /**
-     * Rebar 在方块被破坏时**不会**清理挂在它端口上的电线：`WireEntity` 只有在自己被移除时才会
-     * `disconnectFrom`，所以方块没了线还留在原地，指向一个已经不存在的节点。悬空的线会让 Rebar
-     * 之后任何一次节点移除都抛 NPE（`ElectricPortEntity.getConnectedWires()` 读 `port.node` 查到空），
-     * 所以必须清掉。
+     * 兜底清理：把落在这个方块上的电线掉出来。
+     *
+     * Rebar 自己在 `ElectricRebarBlock.onBreak` 里会调 `removeNode`，端口实体的 `onNodeRemove` →
+     * `dropConnectedWires` 会清线 —— **前提是端口实体还在**。只要端口实体在 `RebarBlockBreakEvent`
+     * 之前被移除（例如某个附属在 `onPostBlockBreak` 里删实体），它的监听器就注销了，Rebar 那套清理
+     * 会被整个跳过。所以这里再兜一层。
      *
      * 已知限制：`loadedWires` 只包含已加载的电线，如果线的另一端在未加载的区块里，这条线清理不到。
      */

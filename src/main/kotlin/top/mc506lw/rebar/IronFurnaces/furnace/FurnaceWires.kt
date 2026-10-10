@@ -31,10 +31,6 @@ internal object FurnaceWires {
         }
     }
 
-    /** 这个方块上有没有挂着电线（用来判断"到底接没接电"）。 */
-    fun hasAnyWire(center: Location): Boolean =
-        WireEntity.loadedWires.any { attachesTo(it, center) }
-
     private fun isNear(port: Location, center: Location): Boolean =
         port.world == center.world && port.distanceSquared(center) <= NEAR_RADIUS * NEAR_RADIUS
 }
