@@ -39,6 +39,20 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
+      # ⚠️ Sided-IO 只从 `mavenLocal` 解析（见 build.gradle.kts 的 repositories），
+      # 而 CI runner 上什么都没有 → 直接 build 会挂在"找不到 top.mc506lw.rebar.sidedio:Sided-IO"。
+      # 所以这里先把 Sided-IO 源码拉下来、`publishToMavenLocal` 一份。
+      #
+      # 为什么不用 JitPack / GitHub Packages：Sided-IO 目前没发布到任何远程仓库，
+      # 而它的坐标是自定义 group（`top.mc506lw.rebar.sidedio`），JitPack 默认只认
+      # `com.github.<user>:<repo>`，硬套要额外的 jitpack.yml。直接在 CI 里编一份最省事、也最确定。
+      - name: Build Sided-IO into mavenLocal
+        run: |
+          git clone --depth 1 https://github.com/LapisWorks/Lapis-SidedIO.git "$RUNNER_TEMP/sidedio"
+          cd "$RUNNER_TEMP/sidedio"
+          chmod +x ./gradlew
+          ./gradlew publishToMavenLocal --no-daemon
+
       - name: Build
         run: ./gradlew build --no-daemon
 
