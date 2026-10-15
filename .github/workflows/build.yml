@@ -50,6 +50,10 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/LapisWorks/Lapis-SidedIO.git "$RUNNER_TEMP/sidedio"
           cd "$RUNNER_TEMP/sidedio"
+          # ⚠️ 仓库里那份 gradle.properties 是在 Windows 上提交的，带着
+          # `org.gradle.java.home=C://...` —— Linux runner 上这个路径不存在，Gradle 直接起不来。
+          # （上面那个 "Remove local-only org.gradle.java.home" 步骤只清了本仓库的，没清这份。）
+          sed -i '/^org\.gradle\.java\.home/d' gradle.properties
           chmod +x ./gradlew
           ./gradlew publishToMavenLocal --no-daemon
 
