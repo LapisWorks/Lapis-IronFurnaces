@@ -32,4 +32,13 @@ abstract class IronFurnaceBase : RebarBlock {
     }
 
     fun getGuiMaterial(): Material = Material.FURNACE
+
+    /**
+     * 这台熔炉的等级。
+     *
+     * `furnaceTier` 是 `protected` 的（Kotlin 的 `protected` **只对子类可见、不跨包**），
+     * 而"按等级分组"这类逻辑要在**别的实例**上读它（彩虹熔炉要数各档各有多少台），
+     * 所以在基类这里开一个 `internal` 的口子。
+     */
+    internal val tier: FurnaceTier get() = furnaceTier
 }

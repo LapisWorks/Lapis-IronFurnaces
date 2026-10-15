@@ -36,6 +36,15 @@ object FurnaceConfig {
     fun energyPerItem(): Double =
         positive("consumption.energy-per-item", FurnaceElectricSystem.ENERGY_PER_ITEM) * powerMultiplier
 
+    /**
+     * **彩虹熔炉**过了"集齐各档"门槛之后的出力（W/t）。
+     *
+     * 对应 26.3 的 `Config.millionFurnacePowerToGenerate`。和别的档位不一样：
+     * 它不是"装了发电机升级就出这个数"，而是**门槛过了才有**（见 [RainbowFurnace]）。
+     */
+    fun rainbowGeneration(): Double =
+        positive("generation.rainbow", 2000.0) * powerMultiplier
+
     private fun positive(path: String, fallback: Double): Double =
         config.getDouble(path, fallback).takeIf { it.isFinite() && it > 0.0 } ?: fallback
 }

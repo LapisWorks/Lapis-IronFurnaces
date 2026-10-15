@@ -1,34 +1,94 @@
 addon: "Lapis-IronFurnaces"
 
+# Sided-IO 面状态（`SideMode`）里由本附属注册的那几档。
+#
+# ⚠️ 键的根是**本附属的命名空间**（`ironfurnaces`），不是 `sidedio` ——
+# 自定义面状态的翻译键 = `<命名空间>.mode.<名字>`，见 `SideMode.translationKey`。
+mode:
+  fuel_input_eject: "<gold>燃料输入/弹出"
+
+# 物品自己的 lore（工具提示）
+tooltip:
+  # %ticks% = 一件 200 tick 的配方要多少 tick（对齐 26.3 的 tooltip.ironfurnaces.cooktime）
+  cooktime: "<blue>烧炼时间 <dark_gray>·<gray> %ticks% tick"
+
 guide:
   page:
     ironfurnaces: "<yellow>Lapis-IronFurnaces"
 
 item:
+
+  wireless_heater:
+    name: "<aqua>无线能量加热器"
+    lore: |-
+      <gray>存电 1,000,000 J，给绑定的加热棒供电
+  item_heater:
+    name: "<aqua>加热棒"
+    lore: |-
+      <gray>右键无线能量加热器绑定
+      <gray>放进熔炉燃料槽，熔炉改用电工作（棒不消耗）
+
+
+  upgrade_copper:
+    name: "<gold>升级：原版熔炉 → 铜熔炉"
+    lore: |-
+      <gray>把一台原版熔炉变成铜熔炉
+  upgrade_iron:
+    name: "<gold>升级：原版熔炉 → 铁熔炉"
+    lore: |-
+      <gray>把一台原版熔炉变成铁熔炉
+  upgrade_iron2:
+    name: "<gold>升级：铜熔炉 → 铁熔炉"
+    lore: |-
+      <gray>把铜熔炉变成铁熔炉
+  upgrade_gold:
+    name: "<gold>升级：铁熔炉 → 金熔炉"
+    lore: |-
+      <gray>把铁熔炉变成金熔炉
+  upgrade_diamond:
+    name: "<gold>升级：金熔炉 → 钻石熔炉"
+    lore: |-
+      <gray>把金熔炉变成钻石熔炉
+  upgrade_crystal:
+    name: "<gold>升级：钻石熔炉 → 水晶熔炉"
+    lore: |-
+      <gray>把钻石熔炉变成水晶熔炉
+  upgrade_emerald:
+    name: "<gold>升级：钻石熔炉 → 绿宝石熔炉"
+    lore: |-
+      <gray>把钻石熔炉变成绿宝石熔炉
+  upgrade_obsidian:
+    name: "<gold>升级：绿宝石熔炉 → 黑曜石熔炉"
+    lore: |-
+      <gray>把绿宝石熔炉变成黑曜石熔炉
+  upgrade_obsidian2:
+    name: "<gold>升级：水晶熔炉 → 黑曜石熔炉"
+    lore: |-
+      <gray>把水晶熔炉变成黑曜石熔炉
+  upgrade_netherite:
+    name: "<gold>升级：黑曜石熔炉 → 下界合金熔炉"
+    lore: |-
+      <gray>把黑曜石熔炉变成下界合金熔炉
+
   rainbow_core:
     name: "<light_purple>彩虹核心"
     lore: |-
       <gray>用于合成高级熔炉的核心材料
 
-  rainbow_shell:
-    name: "<light_purple>彩虹外壳"
+  rainbow_plating:
+    name: "<light_purple>彩虹镀层"
     lore: |-
-      <gray>用于保护彩虹核心的外壳材料
+      <gray>包在彩虹核心外面的镀层材料
 
   rainbow_coal:
     name: "<light_purple>彩虹煤炭"
     lore: |-
-      <gray>高效的彩虹燃料，燃烧时间是普通煤炭的10倍
-
-  rainbow_connector:
-    name: "<light_purple>彩虹连接器"
-    lore: |-
-      <gray>用于连接彩虹组件的特殊物品
+      <gray>耐用的彩虹燃料：可反复使用 5120 次，不会一次烧尽
 
   blast_upgrade:
     name: "<yellow>高炉组件"
     lore: |-
-      <gray>允许熔炉以2倍速度熔炼矿石类物品
+      <gray>允许熔炉以2倍速度烧炼矿石类物品
       <gray>(如铁矿石→铁锭)
 
   smoker_upgrade:
@@ -51,9 +111,9 @@ item:
   industrial_upgrade:
     name: "<gray>工厂升级"
     lore: |-
-      <gray>输入/输出槽位增加至 6 个（按等级开放 2/4/6）
-      <gray>每个输入槽独立并行烧炼
-      <gray>禁用燃料槽，改为电力驱动
+      <gray>解锁工厂槽位，数量看等级：低级 2 个、中级 4 个、高级 6 个
+      <gray>每个槽独立并行烧炼
+      <gray>撤掉燃料槽，改为耗电运行
 
   generator_upgrade:
     name: "<red>发电机升级"
@@ -61,53 +121,60 @@ item:
       <gray>将多余热量转化为能量
       <gray>为周围机器供电
 
+  copy_tool:
+    name: "<aqua>熔炉配置复制器"
+    lore: |-
+      <gray>右键一台熔炉：复制它的配置
+      <gray>潜行右键另一台：把配置粘上去
+      <dark_gray>（面模式 + 自动输入输出 + 红石）
+
   copper_furnace:
     name: "<gold>铜熔炉"
     lore: |-
-      <gray>基础熔炉，烧炼速度180tick/物品
+      <gray>基础熔炉，烧炼速度 180 tick/物品
 
   iron_furnace:
     name: "<gray>铁熔炉"
     lore: |-
-      <gray>进阶熔炉，烧炼速度160tick/物品
+      <gray>进阶熔炉，烧炼速度 160 tick/物品
 
   gold_furnace:
     name: "<yellow>金熔炉"
     lore: |-
-      <gray>高级熔炉，烧炼速度120tick/物品
+      <gray>高级熔炉，烧炼速度 120 tick/物品
 
   diamond_furnace:
     name: "<aqua>钻石熔炉"
     lore: |-
-      <gray>稀有熔炉，烧炼速度80tick/物品
+      <gray>稀有熔炉，烧炼速度 80 tick/物品
 
   emerald_furnace:
     name: "<green>绿宝石熔炉"
     lore: |-
-      <gray>珍贵熔炉，烧炼速度40tick/物品
+      <gray>珍贵熔炉，烧炼速度 40 tick/物品
       <gray>与水晶熔炉同级
 
   crystal_furnace:
     name: "<light_purple>水晶熔炉"
     lore: |-
-      <gray>晶莹剔透的熔炉，烧炼速度40tick/物品
+      <gray>晶莹剔透的熔炉，烧炼速度 40 tick/物品
       <gray>与绿宝石熔炉同级
 
   obsidian_furnace:
     name: "<dark_purple>黑曜石熔炉"
     lore: |-
-      <gray>坚硬无比的熔炉，烧炼速度20tick/物品
+      <gray>坚硬无比的熔炉，烧炼速度 20 tick/物品
 
   netherite_furnace:
     name: "<red>下界合金熔炉"
     lore: |-
-      <gray>终极熔炉，烧炼速度5tick/物品
+      <gray>终极熔炉，烧炼速度 5 tick/物品
 
   rainbow_furnace:
     name: "<light_purple>彩虹熔炉"
     lore: |-
       <gray>传说级熔炉，每次可烧炼64个物品
-      <gray>烧炼速度20tick/组
+      <gray>烧炼速度 20 tick/组
 
 gui:
   title: "<yellow>熔炉界面"
@@ -122,7 +189,7 @@ gui:
 
   smelt_progress:
     name: "<yellow>⚒ 烧炼中"
-    lore: "<gray>速度: <white>%speed% <gray>(对比原版熔炉)"
+    lore: "<gray>速度：<white>%speed% <gray>（对比原版熔炉）"
 
   no_fuel: "<gray>无燃料"
 
@@ -147,6 +214,19 @@ gui:
     lore: "<gray>当前模式：<white>%mode%"
     hint: "<gray><insn>点击</insn>切换模式"
 
+  side_config:
+    name: "<aqua>🧭 面配置"
+    lore: "<gray>设置每个面的进出料方向"
+    hint: "<gray><insn>点击</insn>打开面板"
+
+  # autoSplit —— **熔炉级**开关（不是面设置），所以按钮在熔炉自己的界面上
+  auto_split:
+    name: "<yellow>自动分流"
+    lore: "<gray>状态：%state%"
+    hint: "<dark_gray>开启后把进料摊平到所有工厂槽位"
+  state_on: "<green>开"
+  state_off: "<dark_gray>关"
+
   no_item: "<gray>无物品"
 
 redstone:
@@ -156,9 +236,15 @@ redstone:
 
 message:
   redstone_mode: "<yellow>红石模式已切换为 %mode%"
-  upgrade_success: "<green>成功升级为 %furnace%!"
+  upgrade_success: "<green>成功升级为 %furnace%！"
   upgrade_failed: "<red>升级失败！请检查材料是否齐全。"
   upgrade_already_max: "<yellow>该熔炉已是最高等级。"
   install_upgrade: "<green>成功安装 %upgrade% 组件！"
   remove_upgrade: "<yellow>已移除 %upgrade% 组件。"
   furnace_not_found: "<red>这不是一个有效的熔炉。"
+  upgrade_wrong_tier: "<red>这张升级与这台熔炉的等级不匹配。"
+  heater_bound: "<green>已把加热器的坐标刻进这根棒里。"
+  copy_copied: "<green>已复制这台熔炉的配置。"
+  copy_applied: "<green>已把配置套用到这台熔炉。"
+  copy_empty: "<red>复制器里还没有配置 —— 先右键一台熔炉复制。"
+  auto_split: "<yellow>自动分流：%state%"

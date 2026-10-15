@@ -92,6 +92,18 @@ class FurnaceFuelSystem(
         val fuelStack = fuelInv.getUnsafeItem(0) ?: return false
         if (fuelStack.isEmpty) return false
 
+        // ⚠️ **无线供能**：燃料槽里放的是**加热棒**时**不烧它** ——
+        // 改从它绑定的加热器方块里扣电。棒是"钥匙"，不消耗（见 [ItemHeater]）。
+        if (top.mc506lw.rebar.ironfurnaces.items.ItemHeater.isHeater(fuelStack)) {
+            return consumeFromHeater(fuelStack)
+        }
+
+        // ⚠️ **彩虹煤**：也不"烧掉"，而是**扣 1 点耐久**（对齐 26.3 的
+        // `getCraftingRemainder` 把"消耗"换成"耐久 -1"）。扣完才消失。
+        if (top.mc506lw.rebar.ironfurnaces.IronFurnaceItems.isRainbowCoal(fuelStack)) {
+            return consumeRainbowCoal(fuelStack)
+        }
+
         val fuelTime = getFuelTimeFromServer(fuelStack)
         if (fuelTime <= 0) return false
 
@@ -112,6 +124,58 @@ class FurnaceFuelSystem(
         consumptionFraction = 0.0
         clearDisplayUpdates = 0
         updateFuelProgressDisplay(fuelStack.type)
+        return true
+    }
+
+    /**
+     * **彩虹煤**：扣 1 点耐久，按 [IronFurnaceItems.RAINBOW_COAL_BURN_TICKS] 记账。
+     *
+     * 耐久扣完才真的把物品从槽里拿走 —— 这就是 26.3 那个
+     * `getCraftingRemainder`（返回"耐久 +1 的自己"）在 Paper 这边的等价做法。
+     */
+    private fun consumeRainbowCoal(stack: org.bukkit.inventory.ItemStack): Boolean {
+        val exhausted = top.mc506lw.rebar.ironfurnaces.IronFurnaceItems.damageRainbowCoal(stack)
+        // 扣完耐久 → 物品消失；否则**原样写回**（`setItem` 会带上新的 damage 组件）
+        if (exhausted && !fuelInv.setItem(MACHINE_UPDATE_REASON, 0, null)) return false
+        if (!exhausted && !fuelInv.setItem(MACHINE_UPDATE_REASON, 0, stack.clone())) return false
+
+        currentFuelTime = top.mc506lw.rebar.ironfurnaces.IronFurnaceItems.RAINBOW_COAL_BURN_TICKS
+        fuelRemaining = currentFuelTime
+        burningFuelType = stack.type
+        consumptionFraction = 0.0
+        clearDisplayUpdates = 0
+        updateFuelProgressDisplay(stack.type)
+        return true
+    }
+
+    /**
+     * **无线供能**：从加热棒绑定的**无线能量加热器**里扣电，按"一次相当于
+     * [WirelessEnergyHeater.FUEL_TICKS] tick 的燃料"记账。
+     *
+     * 三种情况都返回 false（熔炉就停着，和没燃料一样）：
+     * 棒没绑定 / 加热器所在区块没加载 / 加热器里的电不够一次。
+     *
+     * ⚠️ 区块没加载时**不做任何强制加载** —— 那在服务端是 TPS 灾难。
+     * 表现就是"加热器在未加载区块里时熔炉不工作"，这是刻意的。
+     */
+    private fun consumeFromHeater(rod: org.bukkit.inventory.ItemStack): Boolean {
+        val bound = top.mc506lw.rebar.ironfurnaces.items.ItemHeater.boundTo(rod) ?: return false
+        if (!bound.world.isChunkLoaded(bound.blockX shr 4, bound.blockZ shr 4)) return false
+
+        val heater = runCatching {
+            io.github.pylonmc.rebar.block.BlockStorage.get(bound.block)
+        }.getOrNull() as? WirelessEnergyHeater ?: return false
+
+        if (!heater.drain(WirelessEnergyHeater.ENERGY_PER_USE)) return false
+
+        currentFuelTime = WirelessEnergyHeater.FUEL_TICKS
+        fuelRemaining = WirelessEnergyHeater.FUEL_TICKS
+        // ⚠️ 燃烧进度条显示**加热棒自己**（烈焰棒），不是红石块 ——
+        // 燃料槽里放的就是它，显示成别的东西玩家会以为机器里多了个物件。
+        burningFuelType = rod.type
+        consumptionFraction = 0.0
+        clearDisplayUpdates = 0
+        updateFuelProgressDisplay(rod.type)
         return true
     }
 
@@ -192,6 +256,12 @@ class FurnaceFuelSystem(
     }
 
     internal fun getFuelTimeFromServer(stack: ItemStack): Int {
+        // ⚠️ **彩虹煤**：底块是 `Material.COAL`，原版燃料表只认材质。
+        // 它是"耐久型燃料"（见 IronFurnaceItems），这里只报**一次**的量。
+        if (top.mc506lw.rebar.ironfurnaces.IronFurnaceItems.isRainbowCoal(stack)) {
+            return top.mc506lw.rebar.ironfurnaces.IronFurnaceItems.RAINBOW_COAL_BURN_TICKS
+        }
+
         FUEL_DURATIONS[stack.type]?.let { return it }
 
         return try {

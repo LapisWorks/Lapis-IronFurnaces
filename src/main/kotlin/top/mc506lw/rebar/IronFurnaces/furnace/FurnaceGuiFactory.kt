@@ -7,6 +7,7 @@ import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.event.inventory.ClickType
+import top.mc506lw.rebar.sidedio.gui.SideConfigGui
 import xyz.xenondevs.invui.Click
 import xyz.xenondevs.invui.gui.Gui
 import xyz.xenondevs.invui.inventory.VirtualInventory
@@ -47,6 +48,58 @@ class FurnaceGuiFactory(
     private val blueInfo = ItemStackBuilder.of(Material.BLUE_STAINED_GLASS_PANE)
         .name(Component.translatable("ironfurnaces.gui.upgrade_blue.name"))
         .lore(Component.translatable("ironfurnaces.gui.upgrade_blue.lore"))
+
+    /**
+     * **autoSplit**：工厂模式下把进来的物品**摊平**到所有可用槽位，
+     * 让多个槽真正并行烧 —— 不然一摞矿石全挤在第 0 格，其它槽空转。
+     *
+     * ⚠️ 这是**熔炉级**开关，**不是面设置** —— 所以它是熔炉 GUI 上的按钮，
+     * 值存在熔炉自己的 PDC 里（[AbstractIronFurnace.autoSplit]），
+     * **不走** Sided-IO 的面配置面板。
+     */
+    private val autoSplitButton: Item = object : AbstractItem() {
+        override fun getItemProvider(viewer: Player): ItemProvider =
+            ItemStackBuilder.of(if (furnace.autoSplit) Material.HOPPER else Material.BARREL)
+                .name(Component.translatable("ironfurnaces.gui.auto_split.name"))
+                .lore(
+                    Component.translatable(
+                        "ironfurnaces.gui.auto_split.lore",
+                        // 占位符必须用 RebarArgument 传（Rebar 的翻译器只替换这个类型的参数）
+                        RebarArgument.of(
+                            "state",
+                            Component.translatable(
+                                if (furnace.autoSplit) "ironfurnaces.gui.state_on"
+                                else "ironfurnaces.gui.state_off"
+                            )
+                        )
+                    ),
+                    Component.translatable("ironfurnaces.gui.auto_split.hint")
+                )
+
+        override fun handleClick(clickType: ClickType, player: Player, click: Click) {
+            if (!clickType.isLeftClick) return
+            furnace.toggleAutoSplit()
+            player.sendActionBar(
+                Component.translatable(
+                    "ironfurnaces.message.auto_split",
+                    RebarArgument.of(
+                        "state",
+                        Component.translatable(
+                            if (furnace.autoSplit) "ironfurnaces.gui.state_on"
+                            else "ironfurnaces.gui.state_off"
+                        )
+                    )
+                )
+            )
+        }
+    }
+
+    /** 底行按钮：打开 Sided-IO 的面配置面板（六个面并排，一眼看完还能挨个点）。 */
+    private val sideConfigButton = navigationItem(
+        ItemStackBuilder.of(Material.COMPARATOR)
+            .name(Component.translatable("ironfurnaces.gui.side_config.name"))
+            .lore(Component.translatable("ironfurnaces.gui.side_config.lore"))
+    ) { player -> openSideConfigGui(player) }
 
     /** Bottom-right button that cycles the redstone gate, like the mod's redstone setting. */
     private val redstoneButton: Item = object : AbstractItem() {
@@ -101,14 +154,16 @@ class FurnaceGuiFactory(
 
         return Gui.builder()
             .setStructure(
-                "# # # # # # # # U",
+                "# # # # # # # A U",
                 if (leftovers) "# # i # # # # # #" else "# # # # # # # # #",
                 "# # # # > f # # #",
                 if (leftovers) "# # # # # # o # #" else "# # # # # # # # #",
-                "# # # # # # # # R"
+                "# # # # # # # S R"
             )
             .addIngredient('#', GuiItems.background())
             .addIngredient('U', upgradeButton)
+            .addIngredient('A', autoSplitButton)
+            .addIngredient('S', sideConfigButton)
             .addIngredient('R', redstoneButton)
             .addIngredient('>', fuelSystem.fuelProgressItem)
             .addIngredient('f', fuelInv)
@@ -133,14 +188,16 @@ class FurnaceGuiFactory(
 
         val builder = Gui.builder()
             .setStructure(
-                "# # # # # # # # U",
+                "# # # # # # # A U",
                 row { "i" },
                 row { index -> ('1' + index).toString() },
                 row { "o" },
-                "# # # # # # # # R"
+                "# # # # # # # S R"
             )
             .addIngredient('#', GuiItems.background())
             .addIngredient('U', upgradeButton)
+            .addIngredient('A', autoSplitButton)
+            .addIngredient('S', sideConfigButton)
             .addIngredient('R', redstoneButton)
             .addIngredient('i', inputInv)
             .addIngredient('o', outputInv)
@@ -154,14 +211,16 @@ class FurnaceGuiFactory(
 
     private fun createFuelGui(): Gui = Gui.builder()
         .setStructure(
-            "# # # # # # # # U",
+            "# # # # # # # A U",
             "# # i # # # # # #",
             "# # > # S # o # #",
             "# # f # # # # # #",
-            "# # # # # # # # R"
+            "# # # # # # # s R"
         )
         .addIngredient('#', GuiItems.background())
         .addIngredient('U', upgradeButton)
+            .addIngredient('A', autoSplitButton)
+        .addIngredient('s', sideConfigButton)
         .addIngredient('R', redstoneButton)
         .addIngredient('i', inputInv)
         .addIngredient('>', fuelSystem.fuelProgressItem)
@@ -203,6 +262,20 @@ class FurnaceGuiFactory(
             .setViewer(player)
             .build()
             .open()
+    }
+
+    /**
+     * 打开 Sided-IO 的面配置面板。
+     *
+     * ⚠️ 直接开新窗口会**顶掉**当前的熔炉界面（InvUI 一个玩家同时只有一个窗口），
+     * 所以要把"回主界面"这条路一起传进去 —— 面板会在右上角画一个「返回」，
+     * 点了就回到 [openMainGui]（用户实测报过"页面上没有返回按钮"）。
+     *
+     * 面板改完面模式后，Sided-IO 自己会调 `refreshGroups` 重算物流组
+     * （见 `SideConfigGui` 的点击处理），熔炉这边不用额外做什么。
+     */
+    private fun openSideConfigGui(player: Player) {
+        SideConfigGui.open(player, furnace.block) { back -> openMainGui(back) }
     }
 
     private fun navigationItem(provider: ItemProvider, navigate: (Player) -> Unit): Item =

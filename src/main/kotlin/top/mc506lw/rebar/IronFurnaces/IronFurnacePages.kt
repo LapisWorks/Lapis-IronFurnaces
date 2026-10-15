@@ -23,10 +23,13 @@ object IronFurnacePages {
             IronFurnaceItems.FUEL_UPGRADE,
             IronFurnaceItems.INDUSTRIAL_UPGRADE,
             IronFurnaceItems.GENERATOR_UPGRADE,
+            IronFurnaceItems.COPY_TOOL,
             IronFurnaceItems.RAINBOW_CORE,
-            IronFurnaceItems.RAINBOW_SHELL,
-            IronFurnaceItems.RAINBOW_COAL,
-            IronFurnaceItems.RAINBOW_CONNECTOR
+            IronFurnaceItems.RAINBOW_PLATING,
+            IronFurnaceItems.RAINBOW_COAL
+        ) + IronFurnaceItems.TIER_UPGRADES.values + listOf(
+            IronFurnaceItems.WIRELESS_HEATER,
+            IronFurnaceItems.ITEM_HEATER
         )
     }
 

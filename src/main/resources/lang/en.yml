@@ -1,29 +1,89 @@
 addon: "Lapis-IronFurnaces"
 
+# Side modes (`SideMode`) registered by this addon for Sided-IO.
+#
+# WARNING: the key root is THIS addon's namespace (`ironfurnaces`), not `sidedio` —
+# a custom side mode's translation key is `<namespace>.mode.<name>`,
+# see `SideMode.translationKey`.
+mode:
+  fuel_input_eject: "<gold>Fuel Input/Eject"
+
+# Per-item lore (tooltip)
+tooltip:
+  # %ticks% = ticks to finish a 200-tick recipe (mirrors 26.3's tooltip.ironfurnaces.cooktime)
+  cooktime: "<blue>Cook time <dark_gray>·<gray> %ticks% ticks"
+
 guide:
   page:
     ironfurnaces: "<yellow>Lapis-IronFurnaces"
 
 item:
+
+  wireless_heater:
+    name: "<b>Wireless Energy Heater"
+    lore: |-
+      <gray>Stores 1,000,000 J and powers bound heater rods
+  item_heater:
+    name: "<b>Heater Rod"
+    lore: |-
+      <gray>Right-click a heater to bind it, then put it in a furnace's fuel slot to run on power
+
+
+  upgrade_copper:
+    name: "<6>Upgrade: Furnace → Copper"
+    lore: |-
+      <gray>Turns a vanilla furnace into a Copper Furnace
+  upgrade_iron:
+    name: "<6>Upgrade: Furnace → Iron"
+    lore: |-
+      <gray>Turns a vanilla furnace into an Iron Furnace
+  upgrade_iron2:
+    name: "<6>Upgrade: Copper → Iron"
+    lore: |-
+      <gray>Turns a Copper Furnace into an Iron Furnace
+  upgrade_gold:
+    name: "<6>Upgrade: Iron → Gold"
+    lore: |-
+      <gray>Turns an Iron Furnace into a Gold Furnace
+  upgrade_diamond:
+    name: "<6>Upgrade: Gold → Diamond"
+    lore: |-
+      <gray>Turns a Gold Furnace into a Diamond Furnace
+  upgrade_crystal:
+    name: "<6>Upgrade: Diamond → Crystal"
+    lore: |-
+      <gray>Turns a Diamond Furnace into a Crystal Furnace
+  upgrade_emerald:
+    name: "<6>Upgrade: Diamond → Emerald"
+    lore: |-
+      <gray>Turns a Diamond Furnace into an Emerald Furnace
+  upgrade_obsidian:
+    name: "<6>Upgrade: Emerald → Obsidian"
+    lore: |-
+      <gray>Turns an Emerald Furnace into an Obsidian Furnace
+  upgrade_obsidian2:
+    name: "<6>Upgrade: Crystal → Obsidian"
+    lore: |-
+      <gray>Turns a Crystal Furnace into an Obsidian Furnace
+  upgrade_netherite:
+    name: "<6>Upgrade: Obsidian → Netherite"
+    lore: |-
+      <gray>Turns an Obsidian Furnace into a Netherite Furnace
+
   rainbow_core:
     name: "<d>Rainbow Core"
     lore: |-
       <gray>Core material for crafting advanced furnaces
 
-  rainbow_shell:
-    name: "<d>Rainbow Shell"
+  rainbow_plating:
+    name: "<d>Rainbow Plating"
     lore: |-
-      <gray>Protective shell for Rainbow Core
+      <gray>Plating material wrapped around the Rainbow Core
 
   rainbow_coal:
     name: "<d>Rainbow Coal"
     lore: |-
       <gray>Efficient Rainbow fuel, burns 10x longer than coal
-
-  rainbow_connector:
-    name: "<d>Rainbow Connector"
-    lore: |-
-      <gray>Special item for connecting Rainbow components
 
   blast_upgrade:
     name: "<e>Blast Furnace Component"
@@ -60,6 +120,13 @@ item:
     lore: |-
       <gray>Converts excess heat into energy
       <gray>Powers nearby machines
+
+  copy_tool:
+    name: "<b>Furnace Config Copier"
+    lore: |-
+      <gray>Right-click a furnace to copy its settings
+      <gray>Sneak + right-click another to apply them
+      <dark_gray>(side modes + auto I/O + redstone)
 
   copper_furnace:
     name: "<6>Copper Furnace"
@@ -135,6 +202,11 @@ gui:
     lore: "<gray>Current mode: <white>%mode%"
     hint: "<gray><insn>Click</insn> to cycle"
 
+  side_config:
+    name: "<aqua>🧭 Side configuration"
+    lore: "<gray>Set the I/O direction of each face"
+    hint: "<gray><insn>Click</insn> to open panel"
+
   upgrade_red:
     name: "<red>🔴 Special Smelting"
     lore: "<gray>Blast furnace / Smoker component"
@@ -146,6 +218,15 @@ gui:
   upgrade_blue:
     name: "<blue>🔵 Extensions"
     lore: "<gray>Factory / Generator upgrade"
+
+  # autoSplit — a **furnace-level** toggle (not a side setting), so the button
+  # lives on the furnace's own screen
+  auto_split:
+    name: "<e>Auto Split"
+    lore: "<gray>State: %state%"
+    hint: "<dark_gray>Spread incoming items across all factory slots"
+  state_on: "<a>On"
+  state_off: "<8>Off"
 
   no_item: "<gray>No items"
 
@@ -162,3 +243,9 @@ message:
   install_upgrade: "<green>Successfully installed %upgrade% component!"
   remove_upgrade: "<yellow>Removed %upgrade% component."
   furnace_not_found: "<red>This is not a valid furnace."
+  upgrade_wrong_tier: "<red>That upgrade does not match this furnace's tier."
+  heater_bound: "<green>Bound this rod to the heater."
+  copy_copied: "<green>Copied this furnace's settings."
+  copy_applied: "<green>Applied the settings to this furnace."
+  copy_empty: "<red>The copier is empty — right-click a furnace to copy first."
+  auto_split: "<yellow>Auto Split: %state%"
