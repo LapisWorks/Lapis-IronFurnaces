@@ -30,6 +30,14 @@ repositories {
             includeGroup("top.mc506lw.rebar.sidedio")
         }
     }
+    // Sided-IO 的另一条来源：JitPack（从 GitHub 的 tag 现编，不需要任何发布凭据）。
+    // 本机开发优先命中上面的 mavenLocal（离线也能用），CI / 别人克隆时用 JitPack。
+    // 走哪一份由下面的 `sided-io.coordinate` 决定。
+    maven("https://jitpack.io") {
+        content {
+            includeGroup("com.github.LapisWorks")
+        }
+    }
 }
 
 val rebarVersion = project.properties["rebar.version"] as String
@@ -44,7 +52,16 @@ dependencies {
     compileOnly("io.github.pylonmc:rebar:$rebarVersion")
     
     // Sided-IO：对面配置（每面 INPUT/OUTPUT/BOTH/NONE）。运行时由服务器上的 Sided-IO 插件提供。
-    compileOnly("top.mc506lw.rebar.sidedio:Sided-IO:$sidedIoVersion")
+    //
+    // ⚠️ 坐标有**两套**，因为本机和 CI 拿到的不是同一份产物：
+    //   - 本机：`top.mc506lw.rebar.sidedio:Sided-IO:<版本>`（mavenLocal，`--offline` 也能解析）
+    //   - CI  ：`com.github.LapisWorks:Lapis-SidedIO:v<版本>`（JitPack，从 tag 现编）
+    // 两者 groupId 不同，一条依赖写不出来，所以用属性覆盖：
+    //   ./gradlew build -Psided-io.coordinate=com.github.LapisWorks:Lapis-SidedIO:v0.1.2
+    // CI 里就是这么传的（见 .github/workflows/build.yml）。
+    val sidedIoCoordinate = (findProperty("sided-io.coordinate") as String?)
+        ?: "top.mc506lw.rebar.sidedio:Sided-IO:$sidedIoVersion"
+    compileOnly(sidedIoCoordinate)
     
     // InvUI
     // 版本必须跟 Rebar 实际带的一致 —— InvUI 是 Rebar 的 paper-libraries 依赖，

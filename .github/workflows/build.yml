@@ -39,26 +39,11 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
-      # ⚠️ Sided-IO 只从 `mavenLocal` 解析（见 build.gradle.kts 的 repositories），
-      # 而 CI runner 上什么都没有 → 直接 build 会挂在"找不到 top.mc506lw.rebar.sidedio:Sided-IO"。
-      # 所以这里先把 Sided-IO 源码拉下来、`publishToMavenLocal` 一份。
-      #
-      # 为什么不用 JitPack / GitHub Packages：Sided-IO 目前没发布到任何远程仓库，
-      # 而它的坐标是自定义 group（`top.mc506lw.rebar.sidedio`），JitPack 默认只认
-      # `com.github.<user>:<repo>`，硬套要额外的 jitpack.yml。直接在 CI 里编一份最省事、也最确定。
-      - name: Build Sided-IO into mavenLocal
-        run: |
-          git clone --depth 1 https://github.com/LapisWorks/Lapis-SidedIO.git "$RUNNER_TEMP/sidedio"
-          cd "$RUNNER_TEMP/sidedio"
-          # ⚠️ 仓库里那份 gradle.properties 是在 Windows 上提交的，带着
-          # `org.gradle.java.home=C://...` —— Linux runner 上这个路径不存在，Gradle 直接起不来。
-          # （上面那个 "Remove local-only org.gradle.java.home" 步骤只清了本仓库的，没清这份。）
-          sed -i '/^org\.gradle\.java\.home/d' gradle.properties
-          chmod +x ./gradlew
-          ./gradlew publishToMavenLocal --no-daemon
 
       - name: Build
-        run: ./gradlew build --no-daemon
+        # Sided-IO 走 JitPack（本机 mavenLocal 那份 CI 上没有）。
+        # 坐标见 build.gradle.kts 里 `sided-io.coordinate` 那段注释。
+        run: ./gradlew build --no-daemon -Psided-io.coordinate=com.github.LapisWorks:Lapis-SidedIO:v0.1.2
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
